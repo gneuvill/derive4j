@@ -29,24 +29,26 @@ import fj.Equal;
 import fj.Hash;
 import fj.Ord;
 import fj.Show;
-import java.util.function.BiFunction;
-import java.util.function.Function;
-import java.util.function.IntFunction;
 import org.derive4j.Data;
 import org.derive4j.Derive;
 import org.derive4j.FieldNames;
 import org.derive4j.Instances;
 
-import static org.derive4j.example.Exprs.Add;
-import static org.derive4j.example.Exprs.Const;
-import static org.derive4j.example.Exprs.Mult;
+import java.util.function.BiFunction;
+import java.util.function.Function;
+import java.util.function.IntFunction;
 
-@Data(@Derive(@Instances({ Show.class, Hash.class, Equal.class, Ord.class})))
+import static org.derive4j.example.Exprs.*;
+
+@Data(@Derive(@Instances({ Show.class, Hash.class, Equal.class, Ord.class })))
 public abstract class Expr {
 
   public static Integer eval(Expr expression) {
 
-    return expression.match(i -> i, (left, right) -> eval(left) + eval(right), (left, right) -> eval(left) * eval(right),
+    return expression.match(
+        i -> i,
+        (left, right) -> eval(left) + eval(right),
+        (left, right) -> eval(left) * eval(right),
         (expr) -> -eval(expr));
   }
 

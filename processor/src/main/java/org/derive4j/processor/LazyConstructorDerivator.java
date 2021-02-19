@@ -18,10 +18,12 @@
  */
 package org.derive4j.processor;
 
+import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.CodeBlock;
 import com.squareup.javapoet.FieldSpec;
 import com.squareup.javapoet.MethodSpec;
 import com.squareup.javapoet.ParameterSpec;
+import com.squareup.javapoet.ParameterizedTypeName;
 import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
 import com.squareup.javapoet.TypeVariableName;
@@ -45,7 +47,7 @@ import static org.derive4j.processor.api.DerivedCodeSpec.none;
 
 final class LazyConstructorDerivator implements Derivator {
 
-  private final DeriveUtils deriveUtils;
+  private final DeriveUtils                deriveUtils;
   private final StrictConstructorDerivator strictDerivator;
 
   LazyConstructorDerivator(DeriveUtils deriveUtils) {
@@ -64,7 +66,8 @@ final class LazyConstructorDerivator implements Derivator {
     TypeConstructor typeConstructor = adt.typeConstructor();
     SamInterface f0 = deriveUtils.function0Model(adt.deriveConfig().flavour());
     TypeElement lazyTypeElement = f0.samClass();
-    TypeName lazyArgTypeName = TypeName.get(deriveUtils.types().getDeclaredType(lazyTypeElement, typeConstructor.declaredType()));
+    TypeName lazyArgTypeName = TypeName
+        .get(deriveUtils.types().getDeclaredType(lazyTypeElement, typeConstructor.declaredType()));
     String lazyArgName = Utils.uncapitalize(typeConstructor.typeElement().getSimpleName());
     TypeName typeName = TypeName.get(typeConstructor.declaredType());
 
@@ -74,7 +77,10 @@ final class LazyConstructorDerivator implements Derivator {
         .map(TypeVariableName::get)
         .collect(Collectors.toList());
 
-    String className = "Lazy";
+    ClassName className = ClassName.bestGuess("Lazy");
+    TypeName lazyTypeName = typeVariableNames.isEmpty()
+        ? className
+        : ParameterizedTypeName.get(className, typeVariableNames.toArray(new TypeName[0]));
     TypeSpec.Builder typeSpecBuilder = TypeSpec.classBuilder(className)
         .addModifiers(Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL)
         .addTypeVariables(typeVariableNames)
@@ -88,17 +94,31 @@ final class LazyConstructorDerivator implements Derivator {
             .addModifiers(Modifier.PRIVATE, Modifier.SYNCHRONIZED)
             .returns(typeName)
             .addCode(CodeBlock.builder()
-                .addStatement("$T e = expression", lazyArgTypeName)
-                .beginControlFlow("if (e != null)")
-                .addStatement("evaluation = e.$L", f0.sam())
-                .addStatement("expression = null")
+                .addStatement("$T lazy = this", lazyTypeName)
+                .beginControlFlow("while (true)")
+                .addStatement("$T expr = lazy.expression", lazyArgTypeName)
+                .beginControlFlow("if (expr == null)")
+                .addStatement("evaluation = lazy.evaluation", f0.sam())
+                .addStatement("break")
                 .endControlFlow()
+                .beginControlFlow("else")
+                .addStatement("$T eval = expr.$L", typeName, f0.sam())
+                .beginControlFlow("if (eval instanceof $T)", className)
+                .addStatement("lazy = ($T) eval", lazyTypeName)
+                .endControlFlow()
+                .beginControlFlow("else")
+                .addStatement("evaluation = eval")
+                .addStatement("break")
+                .endControlFlow()
+                .endControlFlow()
+                .endControlFlow()
+                .addStatement("expression = null")
                 .addStatement("return evaluation")
                 .build())
             .build())
         .addMethod(Utils.overrideMethodBuilder(adt.matchMethod().element())
-            .addStatement("return (this.expression == null ? this.evaluation : _evaluate()).$L($L)", adt.matchMethod().element()
-                    .getSimpleName(),
+            .addStatement("return (this.expression == null ? this.evaluation : _evaluate()).$L($L)",
+                adt.matchMethod().element().getSimpleName(),
                 Utils.asArgumentsStringOld(adt.matchMethod().element().getParameters()))
             .build());
 
@@ -110,7 +130,8 @@ final class LazyConstructorDerivator implements Derivator {
 
     typeSpecBuilder.addMethods(optionalAsStream(strictDerivator.findAbstractEquals(typeConstructor.typeElement())
         .map(equals -> deriveUtils.overrideMethodBuilder(equals, adt.typeConstructor().declaredType())
-            .addStatement("return (this.expression == null ? this.evaluation : _evaluate()).equals($L)", equals.getParameters().get(0).getSimpleName())
+            .addStatement("return (this.expression == null ? this.evaluation : _evaluate()).equals($L)",
+                equals.getParameters().get(0).getSimpleName())
             .build())).collect(Collectors.toList()));
 
     typeSpecBuilder.addMethods(optionalAsStream(strictDerivator.findAbstractHashCode(typeConstructor.typeElement())
@@ -123,15 +144,15 @@ final class LazyConstructorDerivator implements Derivator {
             .addStatement("return (this.expression == null ? this.evaluation : _evaluate()).toString()")
             .build())).collect(Collectors.toList()));
 
-    return result(codeSpec(typeSpecBuilder.build(), MethodSpec.methodBuilder("lazy")
-        .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
-        .addTypeVariables(typeConstructor.typeVariables().stream().map(TypeVariableName::get).collect(Collectors.toList()))
-        .addParameter(lazyArgTypeName, lazyArgName)
-        .returns(typeName)
-        .addStatement("return new $L$L($L)", className, typeVariableNames.isEmpty()
-            ? ""
-            : "<>", lazyArgName)
-        .build()));
+    return result(codeSpec(typeSpecBuilder.build(),
+        MethodSpec.methodBuilder("lazy")
+            .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
+            .addTypeVariables(
+                typeConstructor.typeVariables().stream().map(TypeVariableName::get).collect(Collectors.toList()))
+            .addParameter(lazyArgTypeName, lazyArgName)
+            .returns(typeName)
+            .addStatement("return new $L$L($L)", className, typeVariableNames.isEmpty() ? "" : "<>", lazyArgName)
+            .build()));
 
   }
 
