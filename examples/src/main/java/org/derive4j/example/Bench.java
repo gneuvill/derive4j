@@ -1,69 +1,85 @@
 /*
- * Copyright (c) 2017, Jean-Baptiste Giraudeau <jb@giraudeau.info>
+ * Copyright (c) 2019, Jean-Baptiste Giraudeau <jb@giraudeau.info>
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *  * Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
- *  * Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution.
- *  * Neither the name of the copyright holder nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
+ * This file is part of "Derive4J - Annotation Processor".
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * "Derive4J - Annotation Processor" is free software: you can redistribute it
+ * and/or modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation, either version 3 of the License,
+ * or (at your option) any later version.
+ *
+ * "Derive4J - Annotation Processor" is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with "Derive4J - Annotation Processor".  If not, see <http://www.gnu.org/licenses/>.
  */
 package org.derive4j.example;
 
+import java.util.function.IntSupplier;
+
 public class Bench {
 
-  static final int COUNT      = 500000;
-  static final int ITERATIONS = 200;
+  static final int COUNT      = 50000;
+  static final int ITERATIONS = 25;
   static final int WARMUP     = 100;
+  static final int FILTER     = 10000;
+  static final int BIND       = 10;
 
-  public static void main(String[] args) {
+  public static void main(String[] args) throws InterruptedException {
 
-    // Average time after 200 iterations: 44.041202 ms
-    timed(() -> List.range(0, COUNT).filter(i -> i >= 100000).length());
+    // Derive4J Lazy List: Average time: 82.222062 ms
+    timed(Bench::derive4JList);
 
-    // Average time after 200 iterations: 55.995317 ms
-    timed(() -> io.vavr.collection.Stream.range(0, COUNT).filter(i -> i >= 100000).length());
+    // Vavr Lazy List: Average time: 86.286897 ms
+    timed(Bench::vavrStream);
 
-    // Average time after 200 iterations: 49.114037 ms
-    timed(() -> fj.data.Stream.range(0, COUNT).filter(i -> i >= 100000).length());
-
-    // Average time after 200 iterations: 6.264414 ms
-    timed(() -> java.util.stream.Stream.iterate(0, i -> i + 1).limit(COUNT).filter(i -> i >= 100000).reduce(0,
-        (i1, i2) -> i1 + 1));
-
-    // Average time after 200 iterations: 6.911543 ms
-    timed(() -> Stream.range(0, COUNT).length());
+    // FJ Ephemeral List: Average time: 82.043869 ms
+    timed(Bench::fjStream);
   }
 
-  static void timed(Runnable stuff) {
+  static int derive4JList() {
+    return List.range(0, COUNT)
+        .bind(i -> List.range(i, i + BIND))
+        .filter(i -> i >= FILTER)
+        .map(i -> i + 1)
+        .foldLeft((i, a) -> i + a, 0);
+  }
 
+  static int vavrStream() {
+    return io.vavr.collection.Stream.range(0, COUNT)
+        .flatMap(i -> io.vavr.collection.Stream.range(i, i + BIND))
+        .filter(i -> i >= FILTER)
+        .map(i -> i + 1)
+        .foldLeft(0, (i, a) -> i + a);
+  }
+
+  static int fjStream() {
+    return fj.data.Stream.range(0, COUNT)
+        .bind(i -> fj.data.Stream.range(i, i + BIND))
+        .filter(i -> i >= FILTER)
+        .map(i -> i + 1)
+        .foldLeft((i, a) -> i + a, 0);
+  }
+
+  static void timed(IntSupplier operation) throws InterruptedException {
+    int count = 0;
     for (int i = 0; i < WARMUP; i++) {
-      System.gc(); // try to get rid of potential GC pauses
-      stuff.run();
+      count += operation.getAsInt();
     }
     long vs = 0;
     for (int i = 0; i < ITERATIONS; i++) {
+      Thread.sleep(100);
       System.gc(); // try to get rid of potential GC pauses
+      Thread.sleep(200);
       long t = System.nanoTime();
-      stuff.run();
+      count += operation.getAsInt();
       vs += (System.nanoTime() - t);
     }
-    System.out.printf("Average time after %d iterations: %f ms\n", ITERATIONS, (vs / 1000000.0) / ITERATIONS);
+    System.out.printf("Result: %d - Average time after %d iterations: %f ms\n", count, ITERATIONS,
+        (vs / 1000000.0) / ITERATIONS);
   }
 
 }

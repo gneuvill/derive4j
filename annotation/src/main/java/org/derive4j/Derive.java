@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, Jean-Baptiste Giraudeau <jb@giraudeau.info>
+ * Copyright (c) 2019, Jean-Baptiste Giraudeau <jb@giraudeau.info>
  *
  * This file is part of "Derive4J - Annotations API".
  *
@@ -26,8 +26,8 @@ import static org.derive4j.Make.caseOfMatching;
 import static org.derive4j.Make.casesMatching;
 import static org.derive4j.Make.catamorphism;
 import static org.derive4j.Make.constructors;
+import static org.derive4j.Make.factory;
 import static org.derive4j.Make.getters;
-import static org.derive4j.Make.hktCoerce;
 import static org.derive4j.Make.lambdaVisitor;
 import static org.derive4j.Make.lazyConstructor;
 import static org.derive4j.Make.modifiers;
@@ -41,8 +41,10 @@ public @interface Derive {
 
   Visibility withVisibility() default Same;
 
+  Class<?> extend() default Class.class;
+
   Make[] make() default { lambdaVisitor, constructors, getters, modifiers, lazyConstructor, caseOfMatching,
-      casesMatching, catamorphism, hktCoerce };
+      casesMatching, catamorphism, factory };
 
   Instances[] value() default {};
 

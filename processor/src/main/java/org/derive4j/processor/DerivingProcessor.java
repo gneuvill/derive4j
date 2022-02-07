@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, Jean-Baptiste Giraudeau <jb@giraudeau.info>
+ * Copyright (c) 2019, Jean-Baptiste Giraudeau <jb@giraudeau.info>
  *
  * This file is part of "Derive4J - Annotation Processor".
  *
@@ -19,6 +19,7 @@
 package org.derive4j.processor;
 
 import com.google.auto.service.AutoService;
+import com.squareup.javapoet.AnnotationSpec;
 import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.JavaFile;
 import com.squareup.javapoet.MethodSpec;
@@ -40,7 +41,6 @@ import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.Processor;
 import javax.annotation.processing.RoundEnvironment;
 import javax.annotation.processing.SupportedAnnotationTypes;
-import javax.annotation.processing.SupportedSourceVersion;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
@@ -81,13 +81,13 @@ import static org.derive4j.processor.api.model.DerivedInstanceConfigs.getImplSel
 import static org.derive4j.processor.api.model.DerivedInstanceConfigs.getTargetClass;
 
 @AutoService(Processor.class)
-@SupportedSourceVersion(SourceVersion.RELEASE_8)
 @SupportedAnnotationTypes("*")
 public final class DerivingProcessor extends AbstractProcessor {
 
   private static final Set<ElementKind>                   scannedElementKinds = EnumSet.of(ElementKind.CLASS,
       ElementKind.INTERFACE, ElementKind.ENUM);
   private final ArrayList<P2<String, RuntimeException>>   remainingElements   = new ArrayList<>();
+  private DeriveUtilsImpl                                 deriveUtils;
   private Derivator                                       builtinDerivator;
   private AdtParser                                       adtParser;
   private DeriveConfigBuilder                             deriveConfigBuilder;
@@ -95,11 +95,20 @@ public final class DerivingProcessor extends AbstractProcessor {
   private Map<P2<ClassName, Optional<String>>, Derivator> derivators;
 
   @Override
+  public SourceVersion getSupportedSourceVersion() {
+    return SourceVersion.latestSupported();
+  }
+
+  @Override
   public synchronized void init(ProcessingEnvironment processingEnv) {
     super.init(processingEnv);
 
     deriveConfigBuilder = new DeriveConfigBuilder(processingEnv.getElementUtils());
-    DeriveUtilsImpl deriveUtils = new DeriveUtilsImpl(processingEnv.getElementUtils(), processingEnv.getTypeUtils(),
+
+    deriveUtils = new DeriveUtilsImpl(
+        processingEnv.getElementUtils(),
+        processingEnv.getTypeUtils(),
+        processingEnv.getSourceVersion(),
         deriveConfigBuilder);
     builtinDerivator = BuiltinDerivator.derivator(deriveUtils);
     adtParser = new AdtParser(deriveUtils);
@@ -165,14 +174,17 @@ public final class DerivingProcessor extends AbstractProcessor {
             if (className.equals(targetClassName)) {
               codeSpec = codeSpec.append(derivedClass.getValue()._2());
             } else {
-              TypeSpec classSpec = toTypeSpec(deriveConfig, className, derivedClass.getValue()._2());
+              TypeSpec classSpec = toTypeSpec(deriveConfig, className, derivedClass.getValue()._2())
+                  .addOriginatingElement(element)
+                  .build();
               JavaFile javaFile = JavaFile.builder(targetClassName.packageName(), classSpec).build();
               derivedInstances = derivedInstances.then(effect(() -> javaFile.writeTo(processingEnv.getFiler())));
             }
             derivedInstances = derivedClass.getValue()._1().map(messagePrint).reduce(derivedInstances, IO::then);
           }
 
-          TypeSpec classSpec = toTypeSpec(deriveConfig, targetClassName, codeSpec);
+          TypeSpec classSpec = toTypeSpec(deriveConfig, targetClassName, codeSpec).addOriginatingElement(element)
+              .build();
 
           IO<Unit> extendErrors = effect(() -> {
           });
@@ -206,15 +218,29 @@ public final class DerivingProcessor extends AbstractProcessor {
                         .voided());
   }
 
-  private TypeSpec toTypeSpec(DeriveConfig deriveConfig, ClassName targetClassName, DerivedCodeSpec codeSpec) {
-    return TypeSpec.classBuilder(targetClassName)
+  private TypeSpec.Builder toTypeSpec(DeriveConfig deriveConfig, ClassName targetClassName, DerivedCodeSpec codeSpec) {
+    TypeSpec.Builder builder = TypeSpec.classBuilder(targetClassName)
         .addModifiers(Modifier.FINAL,
             caseOf(deriveConfig.targetClass().visibility()).Package_(Modifier.FINAL).otherwise_(Modifier.PUBLIC))
         .addMethod(MethodSpec.constructorBuilder().addModifiers(Modifier.PRIVATE).build())
         .addTypes(getClasses(codeSpec))
         .addFields(getFields(codeSpec))
-        .addMethods(getMethods(codeSpec))
-        .build();
+        .addMethods(getMethods(codeSpec));
+
+    deriveUtils.generatedAnnotation()
+        .ifPresent(annotation -> builder.addAnnotation(AnnotationSpec.builder(ClassName.get(annotation))
+            .addMember("value", "$S", getClass().getCanonicalName())
+            .build()));
+
+    deriveConfig.targetClass().extend().ifPresent(cn -> {
+      if (deriveUtils.findTypeElement(cn).get().getKind().isInterface()) {
+        builder.addSuperinterface(cn);
+      } else {
+        builder.superclass(cn);
+      }
+    });
+
+    return builder;
   }
 
   private Map<ClassName, P2<Stream<DeriveMessage>, DerivedCodeSpec>> derivedInstances(AlgebraicDataType adt) {

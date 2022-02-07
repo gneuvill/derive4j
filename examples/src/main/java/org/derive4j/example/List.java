@@ -1,27 +1,20 @@
 /*
- * Copyright (c) 2017, Jean-Baptiste Giraudeau <jb@giraudeau.info>
+ * Copyright (c) 2019, Jean-Baptiste Giraudeau <jb@giraudeau.info>
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *  * Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
- *  * Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution.
- *  * Neither the name of the copyright holder nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
+ * This file is part of "Derive4J - Annotation Processor".
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * "Derive4J - Annotation Processor" is free software: you can redistribute it
+ * and/or modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation, either version 3 of the License,
+ * or (at your option) any later version.
+ *
+ * "Derive4J - Annotation Processor" is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with "Derive4J - Annotation Processor".  If not, see <http://www.gnu.org/licenses/>.
  */
 package org.derive4j.example;
 
@@ -32,6 +25,7 @@ import fj.Show;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.IntFunction;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
@@ -44,7 +38,7 @@ import static org.derive4j.example.Lists.cons;
 import static org.derive4j.example.Lists.lazy;
 import static org.derive4j.example.Lists.nil;
 
-@Data(@Derive(@Instances({ Show.class, Hash.class, Equal.class, Ord.class })))
+@Data(@Derive(extend = ListMethods.class, value = @Instances({ Show.class, Hash.class, Equal.class, Ord.class })))
 public abstract class List<A> {
 
   public static List<Integer> naturals() {
@@ -58,8 +52,19 @@ public abstract class List<A> {
   }
 
   public static List<Integer> range(final int from, int toExclusive) {
+    IntFunction<List<Integer>> next = new IntFunction<List<Integer>>() {
+      @Override
+      public List<Integer> apply(int from) {
+        return (from >= toExclusive) ? nil() : cons(from, lazy(() -> apply(from + 1)));
+      }
+    };
+    return next.apply(from);
+  }
 
-    return (from == toExclusive) ? nil() : cons(from, lazy(() -> range(from + 1, toExclusive)));
+  public final Option<A> find(Predicate<A> p) {
+    return Lists.<A, Option<A>>cata(
+        Options::none,
+        (a, tail) -> p.test(a) ? Options.some(a) : tail, Options::lazy).apply(this);
   }
 
   public static <A> List<A> iterate(A seed, UnaryOperator<A> op) {
@@ -74,28 +79,21 @@ public abstract class List<A> {
   public abstract <X> X list(Supplier<X> nil, @FieldNames({ "head", "tail" }) BiFunction<A, List<A>, X> cons);
 
   public final <B> List<B> map(Function<A, B> f) {
-
-    return lazy(() -> list(Lists::nil, (h, tail) -> cons(f.apply(h), tail.map(f))));
+    return foldRight(Lists::nil, (h, tail) -> cons(f.apply(h), tail), Lists::lazy);
   }
 
   public final List<A> append(final List<A> list) {
-
-    return lazy(() -> list(() -> list, (head, tail) -> cons(head, tail.append(list))));
+    return foldRight(() -> list, Lists::cons, Lists::lazy);
   }
 
   public final List<A> filter(Predicate<A> p) {
-    Function<List<A>, List<A>> filter = Lists.cata(
+    return Lists.<A, List<A>>cata(
         Lists::nil,
-        (a, tail) -> p.test(a) ? cons(a, lazy(tail)) : lazy(tail));
-    return lazy(() -> filter.apply(this));
+        (a, tail) -> p.test(a) ? cons(a, tail) : tail, Lists::lazy).apply(this);
   }
 
   public final <B> List<B> bind(Function<A, List<B>> f) {
-
-    return lazy(() -> list(Lists::nil, (h, t) -> f.apply(h).append(t.bind(f))));
-    // alternative implementation using foldRight:
-    // return lazy(() -> foldRight((h, tail) -> f.apply(h).append(lazy(tail)),
-    // nil()));
+    return foldRight(Lists::nil, (h, tail) -> f.apply(h).append(tail), Lists::lazy);
   }
 
   public final List<A> take(int n) {
@@ -141,9 +139,8 @@ public abstract class List<A> {
     return foldLeft((i, a) -> i + 1, 0);
   }
 
-  public final <B> B foldRight(final BiFunction<A, Supplier<B>, B> f, final B zero) {
-
-    return Lists.cata(() -> zero, f).apply(this);
+  public final <B> B foldRight(Supplier<B> zero, BiFunction<A, B, B> f, Function<Supplier<B>, B> delay) {
+    return Lists.cata(zero, f, delay).apply(this);
   }
 
   public static void main(String[] args) {

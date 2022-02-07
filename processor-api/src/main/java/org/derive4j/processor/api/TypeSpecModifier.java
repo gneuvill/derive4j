@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, Jean-Baptiste Giraudeau <jb@giraudeau.info>
+ * Copyright (c) 2019, Jean-Baptiste Giraudeau <jb@giraudeau.info>
  *
  * This file is part of "Derive4J - Processor API".
  *
@@ -26,8 +26,6 @@ import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
 import com.squareup.javapoet.TypeSpec.Kind;
 import com.squareup.javapoet.TypeVariableName;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -59,11 +57,11 @@ public final class TypeSpecModifier {
   private Set<Modifier>          modifiers;
   private List<TypeVariableName> typeVariables;
   private TypeName               superclass;
-  private List<TypeName>         superinterfaces = new ArrayList<>();
-  private Map<String, TypeSpec>  enumConstants   = new LinkedHashMap<>();
-  private List<FieldSpec>        fieldSpecs      = new ArrayList<>();
-  private List<MethodSpec>       methodSpecs     = new ArrayList<>();
-  private List<TypeSpec>         typeSpecs       = new ArrayList<>();
+  private List<TypeName>         superinterfaces;
+  private Map<String, TypeSpec>  enumConstants;
+  private List<FieldSpec>        fieldSpecs;
+  private List<MethodSpec>       methodSpecs;
+  private List<TypeSpec>         typeSpecs;
   private final List<Element>    originatingElements;
 
   public TypeSpec build() {

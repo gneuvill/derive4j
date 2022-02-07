@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, Jean-Baptiste Giraudeau <jb@giraudeau.info>
+ * Copyright (c) 2019, Jean-Baptiste Giraudeau <jb@giraudeau.info>
  *
  * This file is part of "Derive4J - Annotation Processor".
  *
@@ -45,7 +45,7 @@ import javax.lang.model.type.PrimitiveType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.type.TypeVariable;
-import javax.lang.model.util.TypeKindVisitor7;
+import javax.lang.model.util.TypeKindVisitor8;
 import org.derive4j.ArgOption;
 import org.derive4j.Make;
 import org.derive4j.processor.api.Derivator;
@@ -63,7 +63,6 @@ import static org.derive4j.processor.Utils.joinStrings;
 import static org.derive4j.processor.Utils.optionalAsStream;
 import static org.derive4j.processor.api.DeriveResult.result;
 import static org.derive4j.processor.api.DerivedCodeSpec.none;
-import static org.derive4j.processor.api.model.DataConstructions.caseOf;
 import static org.derive4j.processor.api.model.DataConstructions.caseOf;
 import static org.derive4j.processor.api.model.DeriveVisibilities.caseOf;
 
@@ -280,7 +279,7 @@ final class StrictConstructorDerivator implements Derivator {
         .addMethod(constructorBuilder.build())
         .addMethod(deriveUtils.overrideMethodBuilder(adt.matchMethod().element(), constructor.returnedType())
             .addStatement("return $L.$L($L)", constructor.deconstructor().visitorParam().getSimpleName(),
-                constructor.deconstructor().visitorMethod().getSimpleName(),
+                constructor.deconstructor().method().getSimpleName(),
                 Utils.asArgumentsString(constructor.arguments(), constructor.typeRestrictions()))
             .build());
     if (adt.typeConstructor().declaredType().asElement().getKind() == ElementKind.INTERFACE) {
@@ -304,7 +303,7 @@ final class StrictConstructorDerivator implements Derivator {
             .stream()
             .map(da -> ParameterSpec.builder(TypeName.get(da.type()), da.fieldName()).build())
             .collect(Collectors.toList()))
-        .varargs(constructor.deconstructor().visitorMethod().isVarArgs())
+        .varargs(constructor.deconstructor().method().isVarArgs())
         .returns(constructedType);
 
     Optional<MethodSpec.Builder> gadtFactory = constructor.typeRestrictions().isEmpty()
@@ -319,7 +318,7 @@ final class StrictConstructorDerivator implements Derivator {
                     constructor.typeRestrictions().stream().map(TypeRestriction::typeEq))
                 .map(da -> ParameterSpec.builder(TypeName.get(da.type()), da.fieldName()).build())
                 .collect(Collectors.toList()))
-            .varargs(constructor.deconstructor().visitorMethod().isVarArgs())
+            .varargs(constructor.deconstructor().method().isVarArgs())
             .returns(TypeName.get(adt.typeConstructor().declaredType()))
             .addStatement("return ($T) $L($L)", TypeName.get(adt.typeConstructor().declaredType()), constructorName,
                 Utils.asArgumentsString(constructor.arguments())));
@@ -383,7 +382,7 @@ final class StrictConstructorDerivator implements Derivator {
   private static String equalityTest(DataArgument da) {
 
     String thisField = "this." + da.fieldName();
-    return da.type().accept(new TypeKindVisitor7<String, String>() {
+    return da.type().accept(new TypeKindVisitor8<String, String>() {
 
       @Override
       public String visitTypeVariable(TypeVariable t, String p) {
@@ -426,7 +425,7 @@ final class StrictConstructorDerivator implements Derivator {
 
   private static String hascode(DataArgument da) {
 
-    return da.type().accept(new TypeKindVisitor7<String, String>() {
+    return da.type().accept(new TypeKindVisitor8<String, String>() {
 
       @Override
       public String visitArray(final ArrayType t, final String p) {
@@ -492,7 +491,7 @@ final class StrictConstructorDerivator implements Derivator {
 
   private static String toString(DataArgument da) {
 
-    return da.type().accept(new TypeKindVisitor7<String, String>() {
+    return da.type().accept(new TypeKindVisitor8<String, String>() {
 
       @Override
       public String visitArray(final ArrayType t, final String p) {

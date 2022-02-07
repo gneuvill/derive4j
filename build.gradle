@@ -16,29 +16,30 @@ buildscript {
     }
 
     dependencies {
-        classpath "com.ofg:uptodate-gradle-plugin:1.6.3"
-        classpath "net.ltgt.gradle:gradle-apt-plugin:0.15"
-        classpath "gradle.plugin.nl.javadude.gradle.plugins:license-gradle-plugin:0.14.0"
-        classpath "org.jfrog.buildinfo:build-info-extractor-gradle:4.6.2"
-        classpath "com.diffplug.spotless:spotless-plugin-gradle:3.10.0"
+        classpath "com.github.ben-manes:gradle-versions-plugin:0.21.0"
+        classpath "gradle.plugin.com.hierynomus.gradle.plugins:license-gradle-plugin:0.15.0"
+        classpath "org.jfrog.buildinfo:build-info-extractor-gradle:4.9.7"
+        classpath "com.diffplug.spotless:spotless-plugin-gradle:3.23.1"
     }
 
     wrapper {
-        gradleVersion = "4.6"
+        gradleVersion = "5.5"
+        distributionType = Wrapper.DistributionType.ALL
     }
 }
 
 allprojects {
 
     apply plugin: 'com.jfrog.artifactory'
-    apply plugin: "idea"
     apply plugin: 'jacoco'
+    apply plugin: 'idea'
+
 
     defaultTasks "build"
 
     ext {
         isSnapshot = true
-        d4jBaseVersion = "0.12.4"
+        d4jBaseVersion = "1.2.0"
 
         snapshotAppendix = "-SNAPSHOT"
         d4jVersion = d4jBaseVersion + (isSnapshot ? snapshotAppendix : "")
@@ -54,10 +55,10 @@ allprojects {
 
         primaryEmail = "jb@giraudeau.info"
 
-        dependencyJavaPoet = "com.squareup:javapoet:1.10.0"
-        dependencyPreviousDerive4J = "org.derive4j:derive4j:0.12.3"
+        dependencyJavaPoet = "com.squareup:javapoet:1.11.1"
+        dependencyPreviousDerive4J = "org.derive4j:derive4j:1.1.0"
         dependencyJunit = "junit:junit:4.12"
-        dependencyAutoService = "com.google.auto.service:auto-service:1.0-rc4"
+        dependencyAutoService = "com.google.auto.service:auto-service:1.0-rc5"
 
         gplLicenseName = "The GNU General Public License"
         lgplLicenseName = "The GNU Lesser General Public License"
@@ -81,26 +82,22 @@ artifactoryPublish.skip = true
 
 subprojects {
 
-    apply plugin: "net.ltgt.apt"
-
     apply from: "$rootDir/lib.gradle"
     apply plugin: "java"
-    apply plugin: "eclipse"
-    apply plugin: "idea"
-    apply plugin: "com.ofg.uptodate"
-    apply plugin: "license"
-    apply plugin: "com.jfrog.artifactory"
+    apply plugin: "com.github.ben-manes.versions"
+    apply plugin: "com.github.hierynomus.license"
     apply plugin: "com.diffplug.gradle.spotless"
 
-   spotless {
-     java {
-         eclipse("4.7.2").configFile "$rootDir/etc/eclipse-format.xml"
-         indentWithSpaces(2)
-         trimTrailingWhitespace()
-         removeUnusedImports()
-         endWithNewline()
-     }
-   }
+    spotless {
+        java {
+            eclipse("4.7.2").configFile "$rootDir/etc/eclipse-format.xml"
+            indentWithSpaces(2)
+            trimTrailingWhitespace()
+            removeUnusedImports()
+            endWithNewline()
+        }
+    }
+
 
     repositories {
         mavenLocal()
@@ -115,7 +112,7 @@ subprojects {
     }
 
     license {
-        header project.file('etc/HEADER.txt')
+        header file('etc/HEADER.txt')
         strictCheck true
         ignoreFailures true
         mapping {
@@ -128,18 +125,17 @@ subprojects {
 configure(subprojects) {
 
     apply plugin: "maven"
-    apply plugin: "osgi"
 
     sourceCompatibility = "1.8"
 
     task javadocJar(type: Jar, dependsOn: "javadoc") {
-        classifier = 'javadoc'
+        archiveClassifier = 'javadoc'
         from "build/docs/javadoc"
     }
 
     task sourcesJar(type: Jar) {
         from sourceSets.main.allSource
-        classifier = 'sources'
+        archiveClassifier = 'sources'
     }
 
     artifacts {
@@ -149,33 +145,8 @@ configure(subprojects) {
     }
 
     jar {
-        version project.d4jVersion
-        manifest {
-            name = 'Derive for Java'
-            instruction 'Signature-Version', project.d4jVersion
-            instruction 'Bundle-ActivationPolicy', 'lazy'
-            instruction 'Bundle-Vendor', 'derive4j.org'
-            if(project.name != "processor") {
-                instruction 'Require-Bundle', 'org.derive4j;bundle-version="'+project.d4jBaseVersion+'"'
-            }
-        }
+        archiveVersion = project.d4jVersion
     }
-
-    eclipse {
-        project {
-            natures 'org.eclipse.pde.PluginNature'
-            buildCommand 'org.eclipse.pde.ManifestBuilder'
-            buildCommand 'org.eclipse.pde.SchemaBuilder'
-        }
-    }
-
-    // Output MANIFEST.MF statically so eclipse can see it for plugin development
-    task eclipsePluginManifest(dependsOn: jar) doLast {
-        file("META-INF").mkdirs()
-        jar.manifest.writeTo(file("META-INF/MANIFEST.MF"))
-    }
-
-    eclipseProject.dependsOn eclipsePluginManifest
 
     artifactoryPublish {
         dependsOn sourcesJar, javadocJar
@@ -184,6 +155,10 @@ configure(subprojects) {
 
 task codeCoverageReport(type: JacocoReport) {
     executionData fileTree(project.rootDir.absolutePath).include("**/build/jacoco/*.exec")
+
+
+    classDirectories.setFrom(files(subprojects.findAll {subproject -> subproject.name != "examples"} .sourceSets.main.output))
+    sourceDirectories.setFrom(files(subprojects.findAll {subproject -> subproject.name != "examples"} .sourceSets.main.allSource.srcDirs))
 
     subprojects.each {
         sourceSets it.sourceSets.main
@@ -216,7 +191,7 @@ artifactory {
         }
         defaults {
             publishConfigs('archives')
-            //publishIvy = false
+            publishIvy = false
         }
     }
     resolve {

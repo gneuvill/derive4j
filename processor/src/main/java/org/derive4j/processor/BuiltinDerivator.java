@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, Jean-Baptiste Giraudeau <jb@giraudeau.info>
+ * Copyright (c) 2019, Jean-Baptiste Giraudeau <jb@giraudeau.info>
  *
  * This file is part of "Derive4J - Annotation Processor".
  *
@@ -22,7 +22,6 @@ import java.util.function.Function;
 import org.derive4j.Make;
 import org.derive4j.Makes;
 import org.derive4j.processor.api.Derivator;
-import org.derive4j.processor.api.DeriveResult;
 import org.derive4j.processor.api.DeriveUtils;
 import org.derive4j.processor.api.DerivedCodeSpec;
 
@@ -47,9 +46,9 @@ final class BuiltinDerivator {
         .casesMatching_(new PatternMatchingDerivator(deriveUtils, PatternMatchingDerivator.MatchingKind.Cases))
         .caseOfMatching_(new PatternMatchingDerivator(deriveUtils, PatternMatchingDerivator.MatchingKind.CaseOf))
         .getters_(new GettersDerivator(deriveUtils))
-        .modifiers_(new ModiersDerivator(deriveUtils))
+        .modifiers_(new ModifiersDerivator(deriveUtils))
         .catamorphism_(new CataDerivator(deriveUtils))
-        .hktCoerce_(__ -> DeriveResult.result(DerivedCodeSpec.none()));
+        .factory_(new FactoryDerivator(deriveUtils));
 
     return adt -> traverseResults(
         concat(of(exportDerivator), adt.deriveConfig().makes().stream().map(makeDerivators)).map(d -> d.derive(adt))
