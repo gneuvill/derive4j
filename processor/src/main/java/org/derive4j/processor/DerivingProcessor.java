@@ -19,48 +19,25 @@
 package org.derive4j.processor;
 
 import com.google.auto.service.AutoService;
-import com.squareup.javapoet.AnnotationSpec;
-import com.squareup.javapoet.ClassName;
-import com.squareup.javapoet.JavaFile;
-import com.squareup.javapoet.MethodSpec;
-import com.squareup.javapoet.TypeSpec;
-import java.io.PrintWriter;
-import java.io.StringWriter;
-import java.util.ArrayList;
-import java.util.EnumSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.ServiceLoader;
-import java.util.Set;
-import java.util.function.Function;
-import java.util.stream.Stream;
-import java.util.stream.StreamSupport;
-import javax.annotation.processing.AbstractProcessor;
-import javax.annotation.processing.ProcessingEnvironment;
-import javax.annotation.processing.Processor;
-import javax.annotation.processing.RoundEnvironment;
-import javax.annotation.processing.SupportedAnnotationTypes;
+import com.squareup.javapoet.*;
+import org.derive4j.processor.api.*;
+import org.derive4j.processor.api.model.AlgebraicDataType;
+import org.derive4j.processor.api.model.DeriveConfig;
+import org.derive4j.processor.api.model.DerivedInstanceConfig;
+
+import javax.annotation.processing.*;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
 import javax.tools.Diagnostic;
-import org.derive4j.processor.api.Derivator;
-import org.derive4j.processor.api.DerivatorFactory;
-import org.derive4j.processor.api.DerivatorSelections;
-import org.derive4j.processor.api.DeriveMessage;
-import org.derive4j.processor.api.DeriveMessages;
-import org.derive4j.processor.api.DeriveResult;
-import org.derive4j.processor.api.DeriveUtils;
-import org.derive4j.processor.api.DerivedCodeSpec;
-import org.derive4j.processor.api.Extension;
-import org.derive4j.processor.api.ExtensionFactory;
-import org.derive4j.processor.api.MessageLocalizations;
-import org.derive4j.processor.api.model.AlgebraicDataType;
-import org.derive4j.processor.api.model.DeriveConfig;
-import org.derive4j.processor.api.model.DerivedInstanceConfig;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
@@ -70,12 +47,8 @@ import static org.derive4j.processor.P2s.P2;
 import static org.derive4j.processor.Utils.get;
 import static org.derive4j.processor.Utils.optionalAsStream;
 import static org.derive4j.processor.api.DeriveMessages.message;
-import static org.derive4j.processor.api.DeriveResults.error;
-import static org.derive4j.processor.api.DeriveResults.getError;
-import static org.derive4j.processor.api.DeriveResults.getResult;
-import static org.derive4j.processor.api.DerivedCodeSpecs.getClasses;
-import static org.derive4j.processor.api.DerivedCodeSpecs.getFields;
-import static org.derive4j.processor.api.DerivedCodeSpecs.getMethods;
+import static org.derive4j.processor.api.DeriveResults.*;
+import static org.derive4j.processor.api.DerivedCodeSpecs.*;
 import static org.derive4j.processor.api.model.DeriveVisibilities.caseOf;
 import static org.derive4j.processor.api.model.DerivedInstanceConfigs.getImplSelector;
 import static org.derive4j.processor.api.model.DerivedInstanceConfigs.getTargetClass;
@@ -85,7 +58,7 @@ import static org.derive4j.processor.api.model.DerivedInstanceConfigs.getTargetC
 public final class DerivingProcessor extends AbstractProcessor {
 
   private static final Set<ElementKind>                   scannedElementKinds = EnumSet.of(ElementKind.CLASS,
-      ElementKind.INTERFACE, ElementKind.ENUM);
+      ElementKind.INTERFACE, ElementKind.ENUM, ElementKind.RECORD);
   private final ArrayList<P2<String, RuntimeException>>   remainingElements   = new ArrayList<>();
   private DeriveUtilsImpl                                 deriveUtils;
   private Derivator                                       builtinDerivator;

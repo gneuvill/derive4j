@@ -146,7 +146,7 @@ subprojects {
 
 configure(subprojects) {
 
-    sourceCompatibility = "1.8"
+    sourceCompatibility = "17"
 
     task javadocJar(type: Jar, dependsOn: "javadoc") {
         archiveClassifier = 'javadoc'

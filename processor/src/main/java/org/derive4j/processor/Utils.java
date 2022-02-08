@@ -18,40 +18,7 @@
  */
 package org.derive4j.processor;
 
-import com.squareup.javapoet.ClassName;
-import com.squareup.javapoet.MethodSpec;
-import com.squareup.javapoet.NameAllocator;
-import com.squareup.javapoet.ParameterSpec;
-import com.squareup.javapoet.ParameterizedTypeName;
-import com.squareup.javapoet.TypeName;
-import com.squareup.javapoet.TypeVariableName;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Optional;
-import java.util.function.Function;
-import java.util.function.Predicate;
-import java.util.stream.IntStream;
-import java.util.stream.Stream;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ElementVisitor;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.Modifier;
-import javax.lang.model.element.PackageElement;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.element.TypeParameterElement;
-import javax.lang.model.element.VariableElement;
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.PrimitiveType;
-import javax.lang.model.type.TypeMirror;
-import javax.lang.model.type.TypeVariable;
-import javax.lang.model.type.TypeVisitor;
-import javax.lang.model.util.SimpleElementVisitor8;
-import javax.lang.model.util.SimpleTypeVisitor8;
-import javax.lang.model.util.Types;
+import com.squareup.javapoet.*;
 import org.derive4j.processor.api.DeriveMessage;
 import org.derive4j.processor.api.DeriveResult;
 import org.derive4j.processor.api.model.DataArgument;
@@ -59,13 +26,21 @@ import org.derive4j.processor.api.model.DataArguments;
 import org.derive4j.processor.api.model.TypeRestriction;
 import org.derive4j.processor.api.model.TypeRestrictions;
 
+import javax.lang.model.element.*;
+import javax.lang.model.type.*;
+import javax.lang.model.util.*;
+import java.util.*;
+import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
+
 import static java.util.stream.Collectors.toList;
 import static org.derive4j.processor.P2.p2;
 import static org.derive4j.processor.api.model.DataArguments.getFieldName;
 
 final class Utils {
-  static final TypeVisitor<Optional<DeclaredType>, Unit>                asDeclaredType      = new SimpleTypeVisitor8<Optional<DeclaredType>, Unit>(
-      Optional.empty()) {
+  static final TypeVisitor<Optional<DeclaredType>, Unit>                asDeclaredType      = new SimpleTypeVisitor14<>(Optional.empty()) {
                                                                                               @Override
                                                                                               public Optional<DeclaredType> visitDeclared(
                                                                                                   final DeclaredType t,
@@ -74,8 +49,7 @@ final class Utils {
                                                                                                 return Optional.of(t);
                                                                                               }
                                                                                             };
-  static final TypeVisitor<Optional<TypeVariable>, Unit>                asTypeVariable      = new SimpleTypeVisitor8<Optional<TypeVariable>, Unit>(
-      Optional.empty()) {
+  static final TypeVisitor<Optional<TypeVariable>, Unit>                asTypeVariable      = new SimpleTypeVisitor14<>(Optional.empty()) {
                                                                                               @Override
                                                                                               public Optional<TypeVariable> visitTypeVariable(
                                                                                                   final TypeVariable t,
@@ -84,8 +58,7 @@ final class Utils {
                                                                                                 return Optional.of(t);
                                                                                               }
                                                                                             };
-  static final ElementVisitor<Optional<TypeElement>, Unit>              asTypeElement       = new SimpleElementVisitor8<Optional<TypeElement>, Unit>(
-      Optional.empty()) {
+  static final ElementVisitor<Optional<TypeElement>, Unit>              asTypeElement       = new SimpleElementVisitor14<>(Optional.empty()) {
 
                                                                                               @Override
                                                                                               public Optional<TypeElement> visitType(
@@ -96,7 +69,7 @@ final class Utils {
                                                                                               }
 
                                                                                             };
-  static final SimpleElementVisitor8<PackageElement, Void>              getPackage          = new SimpleElementVisitor8<PackageElement, Void>() {
+  static final SimpleElementVisitor8<PackageElement, Void>              getPackage          = new SimpleElementVisitor14<>() {
 
                                                                                               @Override
                                                                                               public PackageElement visitPackage(
@@ -118,7 +91,7 @@ final class Utils {
                                                                                               }
 
                                                                                             };
-  static final SimpleElementVisitor8<Optional<ExecutableElement>, Void> asExecutableElement = new SimpleElementVisitor8<Optional<ExecutableElement>, Void>() {
+  static final SimpleElementVisitor8<Optional<ExecutableElement>, Void> asExecutableElement = new SimpleElementVisitor14<>() {
 
                                                                                               @Override
                                                                                               public Optional<ExecutableElement> visitExecutable(
@@ -138,7 +111,7 @@ final class Utils {
 
                                                                                             };
 
-  static final SimpleElementVisitor8<Optional<VariableElement>, Void> asVariableElement = new SimpleElementVisitor8<Optional<VariableElement>, Void>() {
+  static final SimpleElementVisitor8<Optional<VariableElement>, Void> asVariableElement = new SimpleElementVisitor14<>() {
 
     @Override
     public Optional<VariableElement> visitVariable(final VariableElement e, final Void p) {
@@ -151,7 +124,7 @@ final class Utils {
     }
   };
 
-  static final TypeVisitor<TypeMirror, Types> asBoxedType = new SimpleTypeVisitor8<TypeMirror, Types>() {
+  static final TypeVisitor<TypeMirror, Types> asBoxedType = new SimpleTypeVisitor14<>() {
 
     @Override
     public TypeMirror visitPrimitive(PrimitiveType t, Types types) {

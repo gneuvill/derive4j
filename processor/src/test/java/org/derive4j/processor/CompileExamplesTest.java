@@ -20,9 +20,10 @@ package org.derive4j.processor;
 
 import com.google.common.truth.Truth;
 import com.google.testing.compile.JavaFileObjects;
+import org.junit.Test;
+
 import java.util.Arrays;
 import java.util.stream.Collectors;
-import org.junit.Test;
 
 import static com.google.testing.compile.JavaSourcesSubjectFactory.javaSources;
 
@@ -91,6 +92,11 @@ public class CompileExamplesTest {
   @Test
   public void compile_extensible_algebras() {
     checkCompileOf("algebras/ObjectAlgebras.java");
+  }
+
+  @Test
+  public void compile_Jadts() {
+    checkCompileOf("jadt/Address.java");
   }
 
   private static void checkCompileOf(String... exampleFiles) {
