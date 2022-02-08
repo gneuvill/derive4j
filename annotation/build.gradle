@@ -4,8 +4,6 @@ pomProjectName = "Derive4J - Annotations"
 archivesBaseName = "${project.projectName}-${project.name}"
 
 dependencies {
-  testCompile dependencyJunit
+  testImplementation dependencyJunit
   annotationProcessor dependencyPreviousDerive4J
 }
-
-configureUpload(lgplLicenseName)

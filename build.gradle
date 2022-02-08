@@ -1,40 +1,28 @@
 
-defaultTasks 'build'
-
-ext {
-}
-
 buildscript {
-
-    repositories {
-        mavenLocal()
-        jcenter()
-        mavenCentral()
-        maven {
-            url "https://plugins.gradle.org/m2/"
-        }
-    }
-
-    dependencies {
-        classpath "com.github.ben-manes:gradle-versions-plugin:0.21.0"
-        classpath "gradle.plugin.com.hierynomus.gradle.plugins:license-gradle-plugin:0.15.0"
-        classpath "org.jfrog.buildinfo:build-info-extractor-gradle:4.9.7"
-        classpath "com.diffplug.spotless:spotless-plugin-gradle:3.23.1"
-    }
-
     wrapper {
-        gradleVersion = "5.5"
+        gradleVersion = "7.3.3"
         distributionType = Wrapper.DistributionType.ALL
     }
 }
 
+plugins {
+    id "com.jfrog.artifactory" version "4.27.0"
+    id "com.github.ben-manes.versions" version "0.42.0" apply false
+    id "com.github.hierynomus.license" version "0.16.1" apply false
+    id "com.diffplug.spotless" version "6.2.1" apply false
+}
+
+defaultTasks 'build'
+
+ext {}
+
 allprojects {
 
-    apply plugin: 'com.jfrog.artifactory'
-    apply plugin: 'jacoco'
-    apply plugin: 'idea'
-
-
+    apply plugin: "com.jfrog.artifactory"
+    apply plugin: "jacoco"
+    apply plugin: "idea"
+    
     defaultTasks "build"
 
     ext {
@@ -82,11 +70,11 @@ artifactoryPublish.skip = true
 
 subprojects {
 
-    apply from: "$rootDir/lib.gradle"
     apply plugin: "java"
+    apply plugin: "maven-publish"
     apply plugin: "com.github.ben-manes.versions"
     apply plugin: "com.github.hierynomus.license"
-    apply plugin: "com.diffplug.gradle.spotless"
+    apply plugin: "com.diffplug.spotless"
 
     spotless {
         java {
@@ -97,7 +85,6 @@ subprojects {
             endWithNewline()
         }
     }
-
 
     repositories {
         mavenLocal()
@@ -120,11 +107,44 @@ subprojects {
         }
     }
 
+    String licenseName =
+        project.name == "processor" ? gplLicenseName : project.name == "examples" ? bsd3LicenseName : lgplLicenseName 
+    
+    publishing {
+        publications {
+            maven(MavenPublication) {
+                from components.java
+                pom {
+                    name = pomProjectName
+                    description = projectDescription
+                    url = projectUrl
+                    organization {
+                        name = pomOrganisation
+                        url = projectUrl
+                    }
+                    scm {
+                        url = scmUrl
+                    }
+                    licenses {
+                        license {
+                            name = licenseName
+                            url = "https://github.com/derive4j/derive4j/blob/master/${project.name}/LICENSE.txt"
+                            distribution = "repo"
+                        }
+                    }
+                    developers {
+                        developer {
+                            name = "Jean-Baptiste Giraudeau"
+                            email = primaryEmail
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 configure(subprojects) {
-
-    apply plugin: "maven"
 
     sourceCompatibility = "1.8"
 
@@ -177,7 +197,7 @@ codeCoverageReport.dependsOn {
 }
 
 artifactory {
-    contextUrl = 'http://oss.jfrog.org/artifactory'   //The base Artifactory URL if not overridden by the publisher/resolver
+    contextUrl = 'https://oss.jfrog.org/artifactory'   //The base Artifactory URL if not overridden by the publisher/resolver
     publish {
         repository {
             // The Artifactory repository key to publish to :
