@@ -18,51 +18,27 @@
  */
 package org.derive4j.processor;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
-import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.element.ElementKind;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.Modifier;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.element.TypeParameterElement;
-import javax.lang.model.element.VariableElement;
+import org.derive4j.FieldNames;
+import org.derive4j.processor.api.DeriveResult;
+import org.derive4j.processor.api.DeriveUtils;
+import org.derive4j.processor.api.MessageLocalization;
+import org.derive4j.processor.api.model.*;
+
+import javax.lang.model.element.*;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.ExecutableType;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.type.TypeVariable;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
-import org.derive4j.FieldNames;
-import org.derive4j.processor.api.DeriveResult;
-import org.derive4j.processor.api.DeriveUtils;
-import org.derive4j.processor.api.MessageLocalization;
-import org.derive4j.processor.api.model.AlgebraicDataType;
-import org.derive4j.processor.api.model.DataArgument;
-import org.derive4j.processor.api.model.DataConstruction;
-import org.derive4j.processor.api.model.DataConstructions;
-import org.derive4j.processor.api.model.DataConstructor;
-import org.derive4j.processor.api.model.DataDeconstructor;
-import org.derive4j.processor.api.model.DeriveConfig;
-import org.derive4j.processor.api.model.MultipleConstructors;
-import org.derive4j.processor.api.model.TypeRestriction;
+import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static java.util.Collections.emptyList;
 import static org.derive4j.processor.P2.p2;
-import static org.derive4j.processor.Utils.asDeclaredType;
-import static org.derive4j.processor.Utils.asTypeElement;
-import static org.derive4j.processor.Utils.asTypeVariable;
-import static org.derive4j.processor.Utils.findOnlyOne;
-import static org.derive4j.processor.Utils.fold;
-import static org.derive4j.processor.Utils.p;
-import static org.derive4j.processor.Utils.traverseOptional;
-import static org.derive4j.processor.Utils.zip;
+import static org.derive4j.processor.Utils.*;
 import static org.derive4j.processor.api.DeriveMessages.message;
 import static org.derive4j.processor.api.DeriveResult.error;
 import static org.derive4j.processor.api.DeriveResult.result;
@@ -108,30 +84,45 @@ final class AdtParser {
                     tv -> types.isSameType(elements.getTypeElement("java.lang.Object").asType(), tv.getUpperBound()))),
             error(message("Please use only type variable without bounds as type parameter", onElement(adtTypeElement))),
 
-            adtTypeVariables -> fold(
-                findOnlyOne(deriveUtils.allAbstractMethods(declaredType)
-                    .stream()
-                    .filter(p(this::isEqualHashcodeToString).negate())
-                    .collect(Collectors.toList())),
-                error(message("One, and only one, abstract method should be define on the data type",
-                    deriveUtils.allAbstractMethods(declaredType).stream().map(MessageLocalization::onElement).collect(
-                        Collectors.toList()))),
+            adtTypeVariables -> parseADT(adtTypeElement, deriveConfig, declaredType, adtTypeVariables)));
+  }
 
-                adtAcceptMethod -> fold(
-                    findOnlyOne(adtAcceptMethod.getTypeParameters()).filter(t -> findOnlyOne(t.getBounds())
-                        .filter(b -> types.isSameType(deriveUtils.object().classModel().asType(), b))
-                        .isPresent()).map(TypeParameterElement::asType).flatMap(asTypeVariable::visit).filter(
-                            tv -> types.isSameType(tv, adtAcceptMethod.getReturnType())),
-                    error(message(
-                        "Method must have one, and only one, type variable (without bounds) that should also be the method "
-                            + "return type.",
-                        onElement(adtAcceptMethod))),
+    private DeriveResult<AlgebraicDataType> parseADT(TypeElement adtTypeElement, DeriveConfig deriveConfig, DeclaredType declaredType, List<TypeVariable> adtTypeVariables) {
+        return fold(
+            findOnlyOne(deriveUtils.allAbstractMethods(declaredType)
+                            .stream()
+                            .filter(p(this::isEqualHashcodeToString).negate())
+                            .collect(Collectors.toList())),
+            error(message("One, and only one, abstract method should be define on the data type",
+                          deriveUtils.allAbstractMethods(declaredType).stream().map(MessageLocalization::onElement).collect(
+                              Collectors.toList()))),
 
-                    expectedReturnType -> parseDataConstruction(declaredType, adtTypeVariables, adtAcceptMethod,
-                        expectedReturnType)
-                            .bind(dc -> validateFieldTypeUniformity(dc).map(fields -> adt(deriveConfig,
-                                typeConstructor(adtTypeElement, declaredType, adtTypeVariables),
-                                matchMethod(adtAcceptMethod, expectedReturnType), dc, fields)))))));
+            adtAcceptMethod -> fold(
+                findOnlyOne(adtAcceptMethod.getTypeParameters()).filter(t -> findOnlyOne(t.getBounds())
+                    .filter(b -> types.isSameType(deriveUtils.object().classModel().asType(), b))
+                    .isPresent()).map(TypeParameterElement::asType).flatMap(asTypeVariable::visit).filter(
+                    tv -> types.isSameType(tv, adtAcceptMethod.getReturnType())),
+                error(message(
+                    "Method must have one, and only one, type variable (without bounds) that should also be the method "
+                        + "return type.",
+                    onElement(adtAcceptMethod))),
+
+                expectedReturnType ->
+                    parseDataConstruction(declaredType, adtTypeVariables, adtAcceptMethod, expectedReturnType)
+                        .bind(dc -> validateFieldTypeUniformity(dc)
+                            .map(fields -> adt(deriveConfig,
+                                               typeConstructor(adtTypeElement, declaredType, adtTypeVariables),
+                                               matchMethod(adtAcceptMethod, expectedReturnType),
+                                               dc,
+                                               fields)))));
+    }
+
+  private DeriveResult<AlgebraicDataType> parseJADT(TypeElement adtTypeElement, DeriveConfig deriveConfig, DeclaredType declaredType, List<TypeVariable> adtTypeVariables) {
+    DataConstructions.oneConstructor(DataConstructors.constructor())
+
+    return result(AlgebraicDataTypes.jadt(deriveConfig,
+                                          typeConstructor(adtTypeElement, declaredType, adtTypeVariables),
+                                          ));
   }
 
   private DeriveResult<List<DataArgument>> validateFieldTypeUniformity(DataConstruction construction) {

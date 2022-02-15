@@ -18,27 +18,27 @@
  */
 package org.derive4j.processor.api.model;
 
-import java.util.List;
 import org.derive4j.Data;
 
-import static org.derive4j.processor.api.model.AlgebraicDataTypes.getDataConstruction;
-import static org.derive4j.processor.api.model.AlgebraicDataTypes.getDeriveConfig;
-import static org.derive4j.processor.api.model.AlgebraicDataTypes.getFields;
-import static org.derive4j.processor.api.model.AlgebraicDataTypes.getMatchMethod;
-import static org.derive4j.processor.api.model.AlgebraicDataTypes.getTypeConstructor;
+import java.util.List;
+import java.util.Optional;
+
+import static org.derive4j.processor.api.model.AlgebraicDataTypes.*;
 
 @Data
 public abstract class AlgebraicDataType {
 
-  public interface Case<R> {
+  public interface Cases<R> {
     R adt(DeriveConfig deriveConfig, TypeConstructor typeConstructor, MatchMethod matchMethod,
         DataConstruction dataConstruction, List<DataArgument> fields);
+    R jadt(DeriveConfig deriveConfig, TypeConstructor typeConstructor, DataConstruction dataConstruction,
+        List<DataArgument> fields);
   }
 
   AlgebraicDataType() {
   }
 
-  public abstract <R> R match(Case<R> adt);
+  public abstract <R> R match(Cases<R> adt);
 
   public DeriveConfig deriveConfig() {
 
@@ -50,7 +50,7 @@ public abstract class AlgebraicDataType {
     return getTypeConstructor(this);
   }
 
-  public MatchMethod matchMethod() {
+  public Optional<MatchMethod> matchMethod() {
 
     return getMatchMethod(this);
   }

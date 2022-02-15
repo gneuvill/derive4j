@@ -40,14 +40,9 @@ import org.derive4j.processor.api.DeriveResult;
 import org.derive4j.processor.api.DeriveUtils;
 import org.derive4j.processor.api.DerivedCodeSpec;
 import org.derive4j.processor.api.OptionModel;
-import org.derive4j.processor.api.model.AlgebraicDataType;
-import org.derive4j.processor.api.model.DataArgument;
-import org.derive4j.processor.api.model.DataConstructor;
-import org.derive4j.processor.api.model.MultipleConstructorsSupport;
-import org.derive4j.processor.api.model.TypeRestriction;
+import org.derive4j.processor.api.model.*;
 
-import static org.derive4j.processor.Utils.asBoxedType;
-import static org.derive4j.processor.Utils.joinStringsAsArguments;
+import static org.derive4j.processor.Utils.*;
 import static org.derive4j.processor.api.DeriveResult.result;
 import static org.derive4j.processor.api.model.DataConstructions.caseOf;
 
@@ -94,19 +89,26 @@ final class GettersDerivator implements Derivator {
       DeclaredType visitorType, List<DataConstructor> constructors, String arg, DataArgument field,
       DeclaredType returnType) {
 
-    Function<TypeVariable, Optional<TypeMirror>> returnTypeArg = tv -> deriveUtils.types().isSameType(tv,
-        adt.matchMethod().returnTypeVariable()) ? Optional.of(returnType) : Optional.empty();
+    final Function<TypeVariable, Optional<TypeMirror>> returnTypeArg = tv -> adt
+      .matchMethod()
+      .map(MatchMethod::returnTypeVariable)
+      .filter(p(curry(deriveUtils.types()::isSameType, tv)))
+      .map(constant(returnType));
 
-    Function<TypeVariable, Optional<TypeMirror>> otherTypeArgs = tv -> Optional
+    final Function<TypeVariable, Optional<TypeMirror>> otherTypeArgs = tv -> Optional
         .of(deriveUtils.elements().getTypeElement(Object.class.getName()).asType());
 
-    FieldSpec getterField = FieldSpec
+    final FieldSpec getterField = FieldSpec
         .builder(TypeName.get(deriveUtils.resolve(deriveUtils.resolve(visitorType, returnTypeArg), otherTypeArgs)),
             Utils.uncapitalize(field.fieldName() + "Getter"))
         .addModifiers(Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL)
         .initializer("$T.$L($L)", adt.deriveConfig().targetClass().className(),
             MapperDerivator.visitorLambdaFactoryName(adt), optionalGetterLambdas(arg, optionModel, constructors, field))
         .build();
+
+    final String getterName = AlgebraicDataTypes.caseOf(adt)
+      .adt((deriveConfig, typeConstructor, matchMethod, dataConstruction, fields) -> matchMethod.element().getSimpleName())
+      .jadt();
 
     MethodSpec getter;
 

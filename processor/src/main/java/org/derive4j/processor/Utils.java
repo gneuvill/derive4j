@@ -28,8 +28,12 @@ import org.derive4j.processor.api.model.TypeRestrictions;
 
 import javax.lang.model.element.*;
 import javax.lang.model.type.*;
-import javax.lang.model.util.*;
+import javax.lang.model.util.SimpleElementVisitor14;
+import javax.lang.model.util.SimpleElementVisitor8;
+import javax.lang.model.util.SimpleTypeVisitor14;
+import javax.lang.model.util.Types;
 import java.util.*;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.IntStream;
@@ -257,9 +261,28 @@ final class Utils {
     return p;
   }
 
-  static <A, B> Function<A, B> f(Function<A, B> f) {
+  static <T> Predicate<T> p(Function<T, Boolean> f) {
+    return f::apply;
+  }
 
+  static <A, B> Function<A, B> f(Function<A, B> f) {
     return f;
+  }
+
+  static <A, B, C> Function<A, Function<B, C>> curry(BiFunction<A, B, C> f) {
+    return a -> b -> f.apply(a, b);
+  }
+
+  static <A, B, C> Function<B, C> curry(BiFunction<A, B, C> f, A a) {
+    return b -> f.apply(a, b);
+  }
+
+  static <A, B, C> BiFunction<B, A, C> flip(BiFunction<A, B, C> f) {
+    return (b, a) -> f.apply(a, b);
+  }
+
+  static <A, B> Function<A, B> constant(B b) {
+    return a -> b;
   }
 
   static MethodSpec.Builder overrideMethodBuilder(final ExecutableElement abstractMethod) {
