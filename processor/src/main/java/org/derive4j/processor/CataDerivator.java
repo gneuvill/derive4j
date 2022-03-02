@@ -41,13 +41,8 @@ import org.derive4j.processor.api.DeriveResult;
 import org.derive4j.processor.api.DeriveUtils;
 import org.derive4j.processor.api.DerivedCodeSpec;
 import org.derive4j.processor.api.SamInterface;
-import org.derive4j.processor.api.model.AlgebraicDataType;
-import org.derive4j.processor.api.model.DataArgument;
-import org.derive4j.processor.api.model.DataArguments;
-import org.derive4j.processor.api.model.DataConstructor;
-import org.derive4j.processor.api.model.DataConstructors;
-import org.derive4j.processor.api.model.MultipleConstructorsSupport;
-import org.derive4j.processor.api.model.TypeRestriction;
+import org.derive4j.processor.api.model.*;
+import org.derive4j.processor.api.model.AlgebraicDataType.Variant.Drv4j;
 
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Stream.concat;
@@ -58,7 +53,7 @@ import static org.derive4j.processor.api.DeriveResult.result;
 import static org.derive4j.processor.api.DerivedCodeSpec.methodSpec;
 import static org.derive4j.processor.api.model.DataConstructions.caseOf;
 
-final class CataDerivator implements Derivator {
+final class CataDerivator implements Derivator<Drv4j> {
 
   CataDerivator(DeriveUtils utils) {
 
@@ -70,10 +65,10 @@ final class CataDerivator implements Derivator {
   private final MapperDerivator mapperDerivator;
 
   @Override
-  public DeriveResult<DerivedCodeSpec> derive(AlgebraicDataType adt) {
+  public DeriveResult<DerivedCodeSpec> derive(AlgebraicDataType<Drv4j> adt) {
 
     return visitorIsObjectAlgebra(adt)
-        ? caseOf(adt.dataConstruction())
+        ? caseOf(AlgebraicDataType.getDataConstruction_(adt))
             .multipleConstructors(MultipleConstructorsSupport.cases()
                 .visitorDispatch((visitorParam, visitorType, constructors) -> visitorDispatchImpl(adt, visitorType,
                     constructors))
@@ -84,9 +79,8 @@ final class CataDerivator implements Derivator {
         : result(DerivedCodeSpec.none());
   }
 
-  boolean visitorIsObjectAlgebra(AlgebraicDataType adt) {
-    List<VariableElement> selfReferenceParams = adt
-        .dataConstruction()
+  boolean visitorIsObjectAlgebra(AlgebraicDataType<Drv4j> adt) {
+    List<VariableElement> selfReferenceParams = AlgebraicDataType.getDataConstruction_(adt)
         .constructors()
         .stream()
         .map(DataConstructors::getDeconstructor)
@@ -96,26 +90,30 @@ final class CataDerivator implements Derivator {
             .stream()
             .filter(para -> utils.types().isSameType(para._2(), adt.typeConstructor().declaredType()))
             .map(P2::_1))
-        .collect(toList());
+        .toList();
 
     return !selfReferenceParams.isEmpty()
         && selfReferenceParams.stream().allMatch(p -> Utils.asTypeVariable.visit(p.asType()).isPresent());
   }
 
-  private TypeName cataMapperTypeName(AlgebraicDataType adt, DataConstructor dc) {
-    return mapperDerivator.mapperTypeName(adt, dc, adt.matchMethod().returnTypeVariable(),
-        TypeName.get(adt.matchMethod().returnTypeVariable()));
+  private TypeName cataMapperTypeName(AlgebraicDataType<Drv4j> adt, DataConstructor dc) {
+    final var matchMethod = AlgebraicDataType.getMatchMethod_(adt);
+
+    return mapperDerivator.mapperTypeName(adt, dc, matchMethod.returnTypeVariable(),
+        TypeName.get(matchMethod.returnTypeVariable()));
   }
 
-  private DeriveResult<DerivedCodeSpec> functionDispatchImpl(AlgebraicDataType adt,
+  private DeriveResult<DerivedCodeSpec> functionDispatchImpl(AlgebraicDataType<Drv4j> adt,
       List<DataConstructor> constructors) {
+
+    final var matchMethod = AlgebraicDataType.getMatchMethod_(adt);
 
     NameAllocator nameAllocator = nameAllocator(adt, constructors);
     nameAllocator.newName("delay", "delay");
 
     SamInterface f = utils.function1Model(adt.deriveConfig().flavour());
     DeclaredType fDT = utils.types().getDeclaredType(f.samClass(), adt.typeConstructor().declaredType(),
-        adt.matchMethod().returnTypeVariable());
+        matchMethod.returnTypeVariable());
     TypeName returnType = TypeName.get(fDT);
     ExecutableElement abstractMethod = utils.allAbstractMethods(fDT).get(0);
 
@@ -126,11 +124,11 @@ final class CataDerivator implements Derivator {
                 .addAnnotation(Override.class)
                 .addModifiers(
                     abstractMethod.getModifiers().stream().filter(m -> m != Modifier.ABSTRACT).collect(toList()))
-                .returns(TypeName.get(adt.matchMethod().returnTypeVariable()))
+                .returns(TypeName.get(matchMethod.returnTypeVariable()))
                 .addParameter(TypeName.get(adt.typeConstructor().declaredType()), nameAllocator.get("adt var"))
                 .addStatement("return $L.$L(() -> $L.$L($L))", nameAllocator.get("delay"), f.sam().getSimpleName(),
                     nameAllocator.get("adt var"),
-                    adt.matchMethod().element().getSimpleName(),
+                    matchMethod.element().getSimpleName(),
                     Utils
                         .joinStringsAsArguments(
                             constructors.stream()
@@ -183,7 +181,7 @@ final class CataDerivator implements Derivator {
     MethodSpec cataMethod = MethodSpec.methodBuilder("cata")
         .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
         .addTypeVariables(
-            concat(adt.typeConstructor().typeVariables().stream(), Stream.of(adt.matchMethod().returnTypeVariable()))
+            concat(adt.typeConstructor().typeVariables().stream(), Stream.of(matchMethod.returnTypeVariable()))
                 .map(TypeVariableName::get)
                 .collect(toList()))
         .returns(returnType)
@@ -197,25 +195,29 @@ final class CataDerivator implements Derivator {
     return result(methodSpec(cataMethod));
   }
 
-  private DeclaredType strictCataType(AlgebraicDataType adt, DeclaredType acceptedVisitorType) {
+  private DeclaredType strictCataType(AlgebraicDataType<Drv4j> adt, DeclaredType acceptedVisitorType) {
     return utils.types().getDeclaredType(utils.asTypeElement(acceptedVisitorType).get(),
         acceptedVisitorType.getTypeArguments()
             .stream()
             .map(tm -> utils.types().isSameType(adt.typeConstructor().declaredType(), tm)
-                ? adt.matchMethod().returnTypeVariable()
+                ? AlgebraicDataType.getMatchMethod_(adt).returnTypeVariable()
                 : tm)
             .toArray(TypeMirror[]::new));
   }
 
-  private DeclaredType delayType(AlgebraicDataType adt) {
+  private DeclaredType delayType(AlgebraicDataType<Drv4j> adt) {
+    final var matchMethod = AlgebraicDataType.getMatchMethod_(adt);
+
     return utils.types().getDeclaredType(utils.function1Model(adt.deriveConfig().flavour()).samClass(),
         utils.types().getDeclaredType(utils.function0Model(adt.deriveConfig().flavour()).samClass(),
-            adt.matchMethod().returnTypeVariable()),
-        adt.matchMethod().returnTypeVariable());
+            matchMethod.returnTypeVariable()),
+        matchMethod.returnTypeVariable());
   }
 
-  private DerivedCodeSpec cataVisitor(AlgebraicDataType adt, DeclaredType visitorType,
+  private DerivedCodeSpec cataVisitor(AlgebraicDataType<Drv4j> adt, DeclaredType visitorType,
       List<DataConstructor> constructors) {
+
+    final var matchMethod = AlgebraicDataType.getMatchMethod_(adt);
 
     NameAllocator nameAllocator = new NameAllocator();
     nameAllocator.newName(uncapitalize(visitorType.asElement().getSimpleName().toString()), "strictCata");
@@ -233,7 +235,7 @@ final class CataDerivator implements Derivator {
     final TypeSpec.Builder cataVisitorBuilder = TypeSpec.classBuilder(cataVisitorClassName)
         .addModifiers(Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL)
         .addTypeVariables(adt.typeConstructor().typeVariables().stream().map(TypeVariableName::get).collect(toList()))
-        .addTypeVariable(TypeVariableName.get(adt.matchMethod().returnTypeVariable()))
+        .addTypeVariable(TypeVariableName.get(matchMethod.returnTypeVariable()))
         .addSuperinterface(TypeName.get(visitorType))
         .addField(FieldSpec.builder(strictCata, nameAllocator.get("strictCata"))
             .addModifiers(Modifier.PRIVATE, Modifier.FINAL)
@@ -250,7 +252,7 @@ final class CataDerivator implements Derivator {
                         .map(p -> utils.types().isSameType(adt.typeConstructor().declaredType(), p._2())
                             ? CodeBlock.of("this.$L.$L(() -> $L.$L(this))", nameAllocator.get("delay"),
                                 f1.sam().getSimpleName(),
-                                p._1().getSimpleName(), adt.matchMethod().element().getSimpleName())
+                                p._1().getSimpleName(), matchMethod.element().getSimpleName())
                             : CodeBlock.of(p._1().getSimpleName().toString()))
                         .collect(CodeBlock.joining(", ")))
                 .build())
@@ -269,17 +271,17 @@ final class CataDerivator implements Derivator {
         .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
         .addTypeVariables(
             adt.typeConstructor().typeVariables().stream().map(TypeVariableName::get).collect(toList()))
-        .addTypeVariable(TypeVariableName.get(adt.matchMethod().returnTypeVariable()))
+        .addTypeVariable(TypeVariableName.get(matchMethod.returnTypeVariable()))
         .addParameter(ParameterSpec.builder(strictCata, nameAllocator.get("strictCata")).build())
         .addParameter(ParameterSpec.builder(delay, nameAllocator.get("delay")).build())
         .returns(TypeName.get(utils.types().getDeclaredType(f1.samClass(), adt.typeConstructor().declaredType(),
-            adt.matchMethod().returnTypeVariable())))
+            matchMethod.returnTypeVariable())))
         .addStatement("$T $L = new $L<>($L, $L)", TypeName.get(visitorType), nameAllocator.get("lazyCata"),
             cataVisitorClassName, nameAllocator.get("strictCata"), nameAllocator.get("delay"))
         .addStatement("return $1L -> $2L.$3L(() -> $1L.$4L($5L))",
             nameAllocator.get("adt var"),
             nameAllocator.get("delay"),
-            f1.sam().getSimpleName(), adt.matchMethod().element().getSimpleName(),
+            f1.sam().getSimpleName(), matchMethod.element().getSimpleName(),
             nameAllocator.get("lazyCata"))
         .build();
 
@@ -287,18 +289,19 @@ final class CataDerivator implements Derivator {
 
   }
 
-  private DeriveResult<DerivedCodeSpec> visitorDispatchImpl(AlgebraicDataType adt, DeclaredType visitorType,
+  private DeriveResult<DerivedCodeSpec> visitorDispatchImpl(AlgebraicDataType<Drv4j> adt, DeclaredType visitorType,
       List<DataConstructor> constructors) {
 
+    final var matchMethod = AlgebraicDataType.getMatchMethod_(adt);
     NameAllocator nameAllocator = nameAllocator(adt, constructors);
 
     MethodSpec cataMethod = MethodSpec.methodBuilder("cata")
         .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
         .addTypeVariables(adt.typeConstructor().typeVariables().stream().map(TypeVariableName::get).collect(toList()))
-        .addTypeVariable(TypeVariableName.get(adt.matchMethod().returnTypeVariable()))
+        .addTypeVariable(TypeVariableName.get(matchMethod.returnTypeVariable()))
         .returns(
             TypeName.get(utils.types().getDeclaredType(utils.function1Model(adt.deriveConfig().flavour()).samClass(),
-                adt.typeConstructor().declaredType(), adt.matchMethod().returnTypeVariable())))
+                adt.typeConstructor().declaredType(), matchMethod.returnTypeVariable())))
         .addParameters(constructors.stream()
             .map(dc -> ParameterSpec.builder(cataMapperTypeName(adt, dc), MapperDerivator.mapperFieldName(dc)).build())
             .collect(toList()))
@@ -313,7 +316,7 @@ final class CataDerivator implements Derivator {
     return result(methodSpec(cataMethod).append(cataVisitor(adt, visitorType, constructors)));
   }
 
-  private static NameAllocator nameAllocator(AlgebraicDataType adt, List<DataConstructor> constructors) {
+  private static NameAllocator nameAllocator(AlgebraicDataType<Drv4j> adt, List<DataConstructor> constructors) {
 
     NameAllocator nameAllocator = new NameAllocator();
     constructors.forEach(

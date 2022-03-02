@@ -80,17 +80,7 @@ import org.derive4j.processor.api.OptionModel;
 import org.derive4j.processor.api.OptionModels;
 import org.derive4j.processor.api.SamInterface;
 import org.derive4j.processor.api.SamInterfaces;
-import org.derive4j.processor.api.model.AlgebraicDataType;
-import org.derive4j.processor.api.model.DataArgument;
-import org.derive4j.processor.api.model.DataArguments;
-import org.derive4j.processor.api.model.DataConstructor;
-import org.derive4j.processor.api.model.DeriveConfig;
-import org.derive4j.processor.api.model.DeriveConfigs;
-import org.derive4j.processor.api.model.DeriveTargetClass;
-import org.derive4j.processor.api.model.DerivedInstanceConfigs;
-import org.derive4j.processor.api.model.Expression;
-import org.derive4j.processor.api.model.Expressions;
-import org.derive4j.processor.api.model.TypeRestriction;
+import org.derive4j.processor.api.model.*;
 
 import static java.util.Collections.emptyList;
 import static java.util.Collections.emptyMap;
@@ -563,7 +553,7 @@ final class DeriveUtilsImpl implements DeriveUtils {
   }
 
   @Override
-  public DeriveResult<FieldsTypeClassInstanceBindingMap> resolveFieldInstances(AlgebraicDataType adt,
+  public <T> DeriveResult<FieldsTypeClassInstanceBindingMap> resolveFieldInstances(AlgebraicDataType<T> adt,
       ClassName typeClass, List<TypeElement> lowPriorityProviders) {
     TypeElement typeClassElement = findTypeElement(typeClass).get();
 
@@ -592,7 +582,7 @@ final class DeriveUtilsImpl implements DeriveUtils {
   }
 
   @Override
-  public DeriveResult<DerivedCodeSpec> generateInstance(AlgebraicDataType adt, ClassName typeClass,
+  public <T> DeriveResult<DerivedCodeSpec> generateInstance(AlgebraicDataType<T> adt, ClassName typeClass,
       List<TypeElement> lowPriorityProviders, Function<InstanceUtils, DerivedCodeSpec> generateInstance) {
 
     return resolveFieldInstances(adt, typeClass, lowPriorityProviders).map(
@@ -692,24 +682,28 @@ final class DeriveUtilsImpl implements DeriveUtils {
 
           @Override
           public CodeBlock matchImpl(Function<DataConstructor, CodeBlock> lambdaImpl) {
-            boolean useVisitorFactory = adt.dataConstruction().isVisitorDispatch()
-                && (adt.dataConstruction().constructors().size() > 1);
-            return CodeBlock.builder()
-                .add("$L(\n",
-                    adt.matchMethod().element().getSimpleName() + (useVisitorFactory
-                        ? "(" + adt.matchMethod().element().getParameters().get(0).getSimpleName()
-                        : ""))
-                .indent()
-                .add(adt.dataConstruction()
-                    .constructors()
-                    .stream()
-                    .map(dc -> lambdaImpl.apply(dc))
-                    .reduce((cb1, cb2) -> cb1.toBuilder().add(",\n").add(cb2).build())
-                    .orElse(CodeBlock.of("")))
-                .add("\n")
-                .unindent()
-                .add(useVisitorFactory ? "))" : ")")
-                .build();
+            return AlgebraicDataTypes.caseOf(adt)
+                .adt((deriveConfig, typeConstructor, matchMethod, dataConstruction, fields, eq) -> {
+                  boolean useVisitorFactory = dataConstruction.isVisitorDispatch()
+                      && (dataConstruction.constructors().size() > 1);
+                  return CodeBlock.builder()
+                      .add("$L(\n",
+                          matchMethod.element().getSimpleName() + (useVisitorFactory
+                              ? "(" + matchMethod.element().getParameters().get(0).getSimpleName()
+                              : ""))
+                      .indent()
+                      .add(dataConstruction
+                          .constructors()
+                          .stream()
+                          .map(lambdaImpl)
+                          .reduce((cb1, cb2) -> cb1.toBuilder().add(",\n").add(cb2).build())
+                          .orElse(CodeBlock.of("")))
+                      .add("\n")
+                      .unindent()
+                      .add(useVisitorFactory ? "))" : ")")
+                      .build();
+                })
+                .jadt_(CodeBlock.of(""));
           }
 
           @Override

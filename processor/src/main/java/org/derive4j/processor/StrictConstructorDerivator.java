@@ -52,12 +52,9 @@ import org.derive4j.processor.api.Derivator;
 import org.derive4j.processor.api.DeriveResult;
 import org.derive4j.processor.api.DeriveUtils;
 import org.derive4j.processor.api.DerivedCodeSpec;
-import org.derive4j.processor.api.model.AlgebraicDataType;
-import org.derive4j.processor.api.model.DataArgument;
-import org.derive4j.processor.api.model.DataConstructor;
-import org.derive4j.processor.api.model.DeriveConfig;
-import org.derive4j.processor.api.model.MultipleConstructorsSupport;
-import org.derive4j.processor.api.model.TypeRestriction;
+import org.derive4j.processor.api.model.*;
+import org.derive4j.processor.api.model.AlgebraicDataType.Variant;
+import org.derive4j.processor.api.model.AlgebraicDataType.Variant.Drv4j;
 
 import static org.derive4j.processor.Utils.joinStrings;
 import static org.derive4j.processor.Utils.optionalAsStream;
@@ -66,7 +63,7 @@ import static org.derive4j.processor.api.DerivedCodeSpec.none;
 import static org.derive4j.processor.api.model.DataConstructions.caseOf;
 import static org.derive4j.processor.api.model.DeriveVisibilities.caseOf;
 
-final class StrictConstructorDerivator implements Derivator {
+final class StrictConstructorDerivator implements Derivator<Variant> {
 
   StrictConstructorDerivator(DeriveUtils deriveUtils) {
     this.deriveUtils = deriveUtils;
@@ -87,23 +84,29 @@ final class StrictConstructorDerivator implements Derivator {
   private final MapperDerivator mapperDerivator;
 
   @Override
-  public DeriveResult<DerivedCodeSpec> derive(AlgebraicDataType adt) {
+  public DeriveResult<DerivedCodeSpec> derive(AlgebraicDataType<Variant> adt) {
+    return AlgebraicDataTypes.caseOf(adt)
+        .adt((deriveConfig, typeConstructor, matchMethod, dataConstruction, fields, eq) -> {
+            final var drv4jAdt = Utils.coerce(adt, eq);
+          DerivedCodeSpec codeSpec;
+          // skip constructors for enums
+          if (typeConstructor.declaredType().asElement().getKind() == ElementKind.ENUM) {
+            codeSpec = none();
+          } else {
+            codeSpec = caseOf(dataConstruction)
+                .multipleConstructors(
+                    constructors -> constructors.constructors().stream().map(dc -> constructorSpec(drv4jAdt, dc)).reduce(none(),
+                        DerivedCodeSpec::append))
+                .oneConstructor(constructor -> constructorSpec(drv4jAdt, constructor))
+                .noConstructor(DerivedCodeSpec::none);
+          }
 
-    DerivedCodeSpec codeSpec;
-    // skip constructors for enums
-    if (adt.typeConstructor().declaredType().asElement().getKind() == ElementKind.ENUM) {
-      codeSpec = none();
-    } else {
-      codeSpec = caseOf(adt.dataConstruction())
-          .multipleConstructors(
-              constructors -> constructors.constructors().stream().map(dc -> constructorSpec(adt, dc)).reduce(none(),
-                  DerivedCodeSpec::append))
-          .oneConstructor(constructor -> constructorSpec(adt, constructor))
-          .noConstructor(DerivedCodeSpec::none);
-    }
+          return needLambdaVisitorGeneration(adt)
+              ? mapperDerivator.derive(drv4jAdt).map(codeSpec::append)
+              : result(codeSpec);
+        })
 
-    return needLambdaVisitorGeneration(adt) ? mapperDerivator.derive(adt).map(codeSpec::append) : result(codeSpec);
-
+        .jadt_(result(DerivedCodeSpec.none()));
   }
 
   Optional<ExecutableElement> findAbstractEquals(TypeElement typeElement) {
@@ -130,11 +133,12 @@ final class StrictConstructorDerivator implements Derivator {
         .findFirst();
   }
 
-  private Optional<MethodSpec> deriveHashCode(AlgebraicDataType adt, DataConstructor constructor) {
+  private Optional<MethodSpec> deriveHashCode(AlgebraicDataType<Drv4j> adt, DataConstructor constructor) {
+    final var dataConstruction = AlgebraicDataType.getDataConstruction_(adt);
 
-    int nbConstructors = adt.dataConstruction().constructors().size();
+    int nbConstructors = dataConstruction.constructors().size();
     int constructorIndex = IntStream.range(0, nbConstructors)
-        .filter(i -> adt.dataConstruction().constructors().get(i).name().equals(constructor.name()))
+        .filter(i -> dataConstruction.constructors().get(i).name().equals(constructor.name()))
         .findFirst()
         .getAsInt();
 
@@ -149,7 +153,7 @@ final class StrictConstructorDerivator implements Derivator {
 
   }
 
-  private Optional<MethodSpec> deriveToString(AlgebraicDataType adt, DataConstructor constructor) {
+  private Optional<MethodSpec> deriveToString(AlgebraicDataType<Drv4j> adt, DataConstructor constructor) {
 
     return findAbstractToString(adt.typeConstructor().typeElement()).map(abstractToString -> {
       MethodSpec.Builder methodBuilder = deriveUtils.overrideMethodBuilder(abstractToString,
@@ -166,12 +170,15 @@ final class StrictConstructorDerivator implements Derivator {
     });
   }
 
-  private Optional<MethodSpec> deriveEquals(AlgebraicDataType adt, DataConstructor constructor) {
+  private Optional<MethodSpec> deriveEquals(AlgebraicDataType<Drv4j> adt, DataConstructor constructor) {
+
+    final var dataConstruction = AlgebraicDataType.getDataConstruction_(adt);
+    final var matchMethod = AlgebraicDataType.getMatchMethod_(adt);
 
     return findAbstractEquals(adt.typeConstructor().typeElement()).map(abstractEquals -> {
       VariableElement objectParam = abstractEquals.getParameters().get(0);
 
-      CodeBlock lambdas = adt.dataConstruction()
+      CodeBlock lambdas = dataConstruction
           .constructors()
           .stream()
           .map(c -> CodeBlock.builder()
@@ -193,7 +200,7 @@ final class StrictConstructorDerivator implements Derivator {
             AnnotationSpec.builder(SuppressWarnings.class).addMember("value", "$S", "unchecked").build());
       }
 
-      return caseOf(adt.dataConstruction()).multipleConstructors(
+      return caseOf(dataConstruction).multipleConstructors(
           MultipleConstructorsSupport.cases().visitorDispatch((visitorParam, visitorType, constructors) ->
 
           equalBuilder
@@ -206,7 +213,7 @@ final class StrictConstructorDerivator implements Derivator {
                           .filter(tr -> deriveUtils.types().isSameType(tr.restrictedTypeVariable(), tv))
                           .map(TypeRestriction::refinementType)
                           .findFirst())),
-                  adt.matchMethod().element().getSimpleName(), adt.deriveConfig().targetClass().className(),
+                  matchMethod.element().getSimpleName(), adt.deriveConfig().targetClass().className(),
                   MapperDerivator.visitorLambdaFactoryName(adt), lambdas)
               .build()
 
@@ -220,7 +227,7 @@ final class StrictConstructorDerivator implements Derivator {
                           .filter(tr -> deriveUtils.types().isSameType(tr.restrictedTypeVariable(), tv))
                           .map(TypeRestriction::refinementType)
                           .findFirst())),
-                  adt.matchMethod().element().getSimpleName(), lambdas).build()))
+                  matchMethod.element().getSimpleName(), lambdas).build()))
           .oneConstructor(c -> equalBuilder.addStatement("return ($1L instanceof $2T) && (($3T) $1L).$4L($5L)",
               objectParam.getSimpleName().toString(),
               TypeName.get(deriveUtils.types().erasure(adt.typeConstructor().declaredType())),
@@ -230,14 +237,14 @@ final class StrictConstructorDerivator implements Derivator {
                       .filter(tr -> deriveUtils.types().isSameType(tr.restrictedTypeVariable(), tv))
                       .map(TypeRestriction::refinementType)
                       .findFirst())),
-              adt.matchMethod().element().getSimpleName(), lambdas).build())
+              matchMethod.element().getSimpleName(), lambdas).build())
           .noConstructor(() -> {
             throw new IllegalArgumentException();
           });
     });
   }
 
-  private DerivedCodeSpec constructorSpec(AlgebraicDataType adt, DataConstructor constructor) {
+  private DerivedCodeSpec constructorSpec(AlgebraicDataType<Drv4j> adt, DataConstructor constructor) {
 
     TypeName constructedType = TypeName.get(constructor.returnedType());
 
@@ -277,7 +284,7 @@ final class StrictConstructorDerivator implements Derivator {
                 .build())
             .collect(Collectors.toList()))
         .addMethod(constructorBuilder.build())
-        .addMethod(deriveUtils.overrideMethodBuilder(adt.matchMethod().element(), constructor.returnedType())
+        .addMethod(deriveUtils.overrideMethodBuilder(AlgebraicDataType.getMatchMethod_(adt).element(), constructor.returnedType())
             .addStatement("return $L.$L($L)", constructor.deconstructor().visitorParam().getSimpleName(),
                 constructor.deconstructor().method().getSimpleName(),
                 Utils.asArgumentsString(constructor.arguments(), constructor.typeRestrictions()))
@@ -369,7 +376,7 @@ final class StrictConstructorDerivator implements Derivator {
     return gadtFactory.map(f -> result.append(DerivedCodeSpec.methodSpec(f.build()))).orElse(result);
   }
 
-  private boolean needLambdaVisitorGeneration(AlgebraicDataType adt) {
+  private boolean needLambdaVisitorGeneration(AlgebraicDataType<?> adt) {
     return !adt.deriveConfig().makes().contains(Make.lambdaVisitor)
         && findAbstractEquals(adt.typeConstructor().typeElement()).isPresent();
   }
@@ -507,4 +514,5 @@ final class StrictConstructorDerivator implements Derivator {
 
     }, "this." + da.fieldName());
   }
+
 }

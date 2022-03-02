@@ -23,6 +23,8 @@ import org.derive4j.processor.api.DeriveResult;
 import org.derive4j.processor.api.DeriveUtils;
 import org.derive4j.processor.api.MessageLocalization;
 import org.derive4j.processor.api.model.*;
+import org.derive4j.processor.api.model.AlgebraicDataType.Variant.Drv4j;
+import org.derive4j.processor.api.model.AlgebraicDataType.Variant.Java;
 
 import javax.lang.model.element.*;
 import javax.lang.model.type.DeclaredType;
@@ -69,7 +71,7 @@ final class AdtParser {
     this.deriveUtils = deriveUtils;
   }
 
-  DeriveResult<AlgebraicDataType> parseAlgebraicDataType(final TypeElement adtTypeElement, DeriveConfig deriveConfig) {
+  DeriveResult<AlgebraicDataType<?>> parseAlgebraicDataType(final TypeElement adtTypeElement, DeriveConfig deriveConfig) {
 
     return fold(
         asDeclaredType.visit(adtTypeElement.asType())
@@ -84,10 +86,15 @@ final class AdtParser {
                     tv -> types.isSameType(elements.getTypeElement("java.lang.Object").asType(), tv.getUpperBound()))),
             error(message("Please use only type variable without bounds as type parameter", onElement(adtTypeElement))),
 
-            adtTypeVariables -> parseADT(adtTypeElement, deriveConfig, declaredType, adtTypeVariables)));
+            adtTypeVariables ->
+                adtTypeElement.getKind() == ElementKind.RECORD
+            || (adtTypeElement.getKind() == ElementKind.INTERFACE && adtTypeElement.getModifiers().contains(Modifier.SEALED))
+                ? parseJADT(adtTypeElement, deriveConfig, declaredType, adtTypeVariables).map(__ -> __)
+                : parseADT(adtTypeElement, deriveConfig, declaredType, adtTypeVariables).map(__ -> __)));
   }
 
-    private DeriveResult<AlgebraicDataType> parseADT(TypeElement adtTypeElement, DeriveConfig deriveConfig, DeclaredType declaredType, List<TypeVariable> adtTypeVariables) {
+    private DeriveResult<AlgebraicDataType<Drv4j>> parseADT(TypeElement adtTypeElement, DeriveConfig deriveConfig,
+        DeclaredType declaredType, List<TypeVariable> adtTypeVariables) {
         return fold(
             findOnlyOne(deriveUtils.allAbstractMethods(declaredType)
                             .stream()
@@ -117,12 +124,10 @@ final class AdtParser {
                                                fields)))));
     }
 
-  private DeriveResult<AlgebraicDataType> parseJADT(TypeElement adtTypeElement, DeriveConfig deriveConfig, DeclaredType declaredType, List<TypeVariable> adtTypeVariables) {
-    DataConstructions.oneConstructor(DataConstructors.constructor())
-
+  private DeriveResult<AlgebraicDataType<Java>>  parseJADT(TypeElement adtTypeElement, DeriveConfig deriveConfig, DeclaredType declaredType, List<TypeVariable> adtTypeVariables) {
     return result(AlgebraicDataTypes.jadt(deriveConfig,
                                           typeConstructor(adtTypeElement, declaredType, adtTypeVariables),
-                                          ));
+                                          null));
   }
 
   private DeriveResult<List<DataArgument>> validateFieldTypeUniformity(DataConstruction construction) {

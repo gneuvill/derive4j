@@ -33,13 +33,14 @@ import org.derive4j.processor.api.DeriveResult;
 import org.derive4j.processor.api.DeriveUtils;
 import org.derive4j.processor.api.DerivedCodeSpec;
 import org.derive4j.processor.api.model.AlgebraicDataType;
+import org.derive4j.processor.api.model.AlgebraicDataType.Variant.Drv4j;
 import org.derive4j.processor.api.model.DataConstructions;
 import org.derive4j.processor.api.model.DataConstructor;
 import org.derive4j.processor.api.model.MultipleConstructorsSupport;
 
 import static java.util.stream.Collectors.toList;
 
-final class FactoryDerivator implements Derivator {
+final class FactoryDerivator implements Derivator<Drv4j> {
 
   private final DeriveUtils   utils;
   private final CataDerivator cataDerivator;
@@ -50,25 +51,25 @@ final class FactoryDerivator implements Derivator {
   }
 
   @Override
-  public DeriveResult<DerivedCodeSpec> derive(AlgebraicDataType adtModel) {
-    return DeriveResult.result(DataConstructions.caseOf(adtModel.dataConstruction())
+  public DeriveResult<DerivedCodeSpec> derive(AlgebraicDataType<Drv4j> adt) {
+    return DeriveResult.result(DataConstructions.caseOf(AlgebraicDataType.getDataConstruction_(adt))
         .multipleConstructors(
             MultipleConstructorsSupport.cases()
                 .visitorDispatch(
-                    (visitorParam, visitorType, constructors) -> cataDerivator.visitorIsObjectAlgebra(adtModel)
-                        ? factory(adtModel, visitorType, constructors)
+                    (visitorParam, visitorType, constructors) -> cataDerivator.visitorIsObjectAlgebra(adt)
+                        ? factory(adt, visitorType, constructors)
                         : DerivedCodeSpec.none())
                 .otherwise_(DerivedCodeSpec.none()))
         .otherwise_(DerivedCodeSpec.none()));
   }
 
-  private DerivedCodeSpec factory(AlgebraicDataType adt, DeclaredType visitorType,
+  private DerivedCodeSpec factory(AlgebraicDataType<Drv4j> adt, DeclaredType visitorType,
       List<DataConstructor> constructors) {
 
     String methodName = "factory";
 
     DeclaredType factoryType = utils.resolve(visitorType,
-        tv -> Optional.of(utils.types().isSameType(adt.matchMethod().returnTypeVariable(), tv)
+        tv -> Optional.of(utils.types().isSameType(AlgebraicDataType.getMatchMethod_(adt).returnTypeVariable(), tv)
             ? adt.typeConstructor().declaredType()
             : tv));
 

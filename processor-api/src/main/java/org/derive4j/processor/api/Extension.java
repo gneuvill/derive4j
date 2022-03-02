@@ -21,8 +21,8 @@ package org.derive4j.processor.api;
 import com.squareup.javapoet.TypeSpec;
 import org.derive4j.processor.api.model.AlgebraicDataType;
 
-public interface Extension {
+public interface Extension<T> {
 
-  DeriveResult<TypeSpec> extend(AlgebraicDataType adtModel, TypeSpec codeGenSpec);
+  DeriveResult<TypeSpec> extend(AlgebraicDataType<T> adtModel, TypeSpec codeGenSpec);
 
 }

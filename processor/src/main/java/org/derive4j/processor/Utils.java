@@ -19,17 +19,14 @@
 package org.derive4j.processor;
 
 import com.squareup.javapoet.*;
+import org.derive4j.hkt.TypeEq;
 import org.derive4j.processor.api.DeriveMessage;
 import org.derive4j.processor.api.DeriveResult;
-import org.derive4j.processor.api.model.DataArgument;
-import org.derive4j.processor.api.model.DataArguments;
-import org.derive4j.processor.api.model.TypeRestriction;
-import org.derive4j.processor.api.model.TypeRestrictions;
+import org.derive4j.processor.api.model.*;
 
 import javax.lang.model.element.*;
 import javax.lang.model.type.*;
 import javax.lang.model.util.SimpleElementVisitor14;
-import javax.lang.model.util.SimpleElementVisitor8;
 import javax.lang.model.util.SimpleTypeVisitor14;
 import javax.lang.model.util.Types;
 import java.util.*;
@@ -73,7 +70,7 @@ final class Utils {
                                                                                               }
 
                                                                                             };
-  static final SimpleElementVisitor8<PackageElement, Void>              getPackage          = new SimpleElementVisitor14<>() {
+  static final SimpleElementVisitor14<PackageElement, Void>              getPackage          = new SimpleElementVisitor14<>() {
 
                                                                                               @Override
                                                                                               public PackageElement visitPackage(
@@ -95,7 +92,7 @@ final class Utils {
                                                                                               }
 
                                                                                             };
-  static final SimpleElementVisitor8<Optional<ExecutableElement>, Void> asExecutableElement = new SimpleElementVisitor14<>() {
+  static final SimpleElementVisitor14<Optional<ExecutableElement>, Void> asExecutableElement = new SimpleElementVisitor14<>() {
 
                                                                                               @Override
                                                                                               public Optional<ExecutableElement> visitExecutable(
@@ -115,7 +112,7 @@ final class Utils {
 
                                                                                             };
 
-  static final SimpleElementVisitor8<Optional<VariableElement>, Void> asVariableElement = new SimpleElementVisitor14<>() {
+  static final SimpleElementVisitor14<Optional<VariableElement>, Void> asVariableElement = new SimpleElementVisitor14<>() {
 
     @Override
     public Optional<VariableElement> visitVariable(final VariableElement e, final Void p) {
@@ -261,7 +258,7 @@ final class Utils {
     return p;
   }
 
-  static <T> Predicate<T> p(Function<T, Boolean> f) {
+  static <T> Predicate<T> p_(Function<T, Boolean> f) {
     return f::apply;
   }
 
@@ -334,4 +331,7 @@ final class Utils {
     return zip(as, IntStream.range(0, as.size()).boxed().collect(toList()));
   }
 
+  static <S, T> AlgebraicDataType<T> coerce(AlgebraicDataType<S> adt, TypeEq<T, S> eq) {
+    return Drv4jProcApi.asAlgebraicDataType(eq.symm().<AlgebraicDataType.µ>lift().coerce(adt));
+  }
 }

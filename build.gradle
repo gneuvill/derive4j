@@ -44,7 +44,8 @@ allprojects {
         primaryEmail = "jb@giraudeau.info"
 
         dependencyJavaPoet = "com.squareup:javapoet:1.11.1"
-        dependencyPreviousDerive4J = "org.derive4j:derive4j:1.1.0"
+        dependencyPreviousDerive4J = "org.derive4j:derive4j:1.1.1"
+        dependencyHkt = "org.derive4j.hkt:hkt:0.10.0-SNAPSHOT"
         dependencyJunit = "junit:junit:4.12"
         dependencyAutoService = "com.google.auto.service:auto-service:1.0-rc5"
 

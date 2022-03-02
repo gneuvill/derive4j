@@ -7,6 +7,7 @@ dependencies {
   implementation project(":processor-api")
   implementation dependencyJavaPoet
   implementation dependencyAutoService
+  implementation dependencyHkt
   annotationProcessor dependencyAutoService
   annotationProcessor dependencyPreviousDerive4J
   testImplementation dependencyJunit

@@ -30,6 +30,7 @@ import java.util.stream.Stream;
 import javax.lang.model.element.Modifier;
 import org.derive4j.processor.api.DeriveUtils;
 import org.derive4j.processor.api.model.AlgebraicDataType;
+import org.derive4j.processor.api.model.AlgebraicDataType.Variant.Drv4j;
 import org.derive4j.processor.api.model.DataConstructor;
 
 import static java.util.Collections.emptyList;
@@ -47,7 +48,7 @@ class PartialMatchingStepDerivator {
     this.matchingKind = matchingKind;
   }
 
-  TypeSpec partialMatchingStepTypeSpec(AlgebraicDataType adt, List<DataConstructor> previousConstructors,
+  TypeSpec partialMatchingStepTypeSpec(AlgebraicDataType<Drv4j> adt, List<DataConstructor> previousConstructors,
       DataConstructor currentConstructor, List<DataConstructor> nextConstructors) {
 
     ParameterizedTypeName nextStepTypeName = superClass(adt, matchingKind, nextConstructors);
@@ -76,7 +77,7 @@ class PartialMatchingStepDerivator {
         .build();
   }
 
-  Stream<MethodSpec.Builder> partialMatchMethodBuilder(AlgebraicDataType adt,
+  Stream<MethodSpec.Builder> partialMatchMethodBuilder(AlgebraicDataType<Drv4j> adt,
       List<DataConstructor> previousConstructors, int nbSkipConstructors, DataConstructor currentConstructor,
       ParameterizedTypeName returnType) {
 
@@ -106,7 +107,7 @@ class PartialMatchingStepDerivator {
         PatternMatchingDerivator.constantMatchMethodBuilder(adt, currentConstructor).returns(returnType));
   }
 
-  static ParameterizedTypeName superClass(AlgebraicDataType adt, PatternMatchingDerivator.MatchingKind matchingKind,
+  static ParameterizedTypeName superClass(AlgebraicDataType<Drv4j> adt, PatternMatchingDerivator.MatchingKind matchingKind,
       List<DataConstructor> nextConstructors) {
     return ParameterizedTypeName.get(
         adt.deriveConfig().targetClass().className().nestedClass(matchingKind.wrapperClassName()).nestedClass(

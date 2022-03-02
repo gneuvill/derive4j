@@ -43,13 +43,15 @@ import org.derive4j.processor.api.DeriveResult;
 import org.derive4j.processor.api.DeriveUtils;
 import org.derive4j.processor.api.DerivedCodeSpec;
 import org.derive4j.processor.api.model.AlgebraicDataType;
+import org.derive4j.processor.api.model.AlgebraicDataType.Variant;
 
+import static org.derive4j.processor.Utils.asTypeElement;
 import static org.derive4j.processor.Utils.optionalAsStream;
 import static org.derive4j.processor.api.DeriveResult.result;
 import static org.derive4j.processor.api.DerivedCodeSpec.methodSpec;
 import static org.derive4j.processor.api.DerivedCodeSpec.none;
 
-final class ExportDerivator implements Derivator {
+final class ExportDerivator implements Derivator<Variant> {
 
   ExportDerivator(DeriveUtils utils) {
     this.utils = utils;
@@ -60,7 +62,7 @@ final class ExportDerivator implements Derivator {
   private final TypeElement exportAsPublicAnnotation;
 
   @Override
-  public DeriveResult<DerivedCodeSpec> derive(AlgebraicDataType adt) {
+  public DeriveResult<DerivedCodeSpec> derive(AlgebraicDataType<Variant> adt) {
 
     return result(Stream.concat(utils.allStaticMethods(adt.typeConstructor().typeElement()),
         optionalAsStream(adt.deriveConfig().targetClass().extend().flatMap(utils::findTypeElement))
@@ -68,13 +70,12 @@ final class ExportDerivator implements Derivator {
         .filter(this::hasExportAsPublicAnnotation)
         .map(this::exportAsPublic)
         .reduce(none(), DerivedCodeSpec::append));
-
   }
 
   private DerivedCodeSpec exportAsPublic(ExecutableElement executableElement) {
     MethodSpec.Builder methodBuilder = replicate(executableElement).addModifiers(Modifier.PUBLIC);
 
-    TypeName className = ClassName.get(executableElement.getEnclosingElement().asType());
+    TypeName className = ClassName.get(asTypeElement.visit(executableElement.getEnclosingElement()).get());
     String methodName = executableElement.getSimpleName().toString();
     String parameters = executableElement.getParameters().stream().map(ve -> ve.getSimpleName().toString()).collect(
         Collectors.joining(", "));
@@ -109,7 +110,7 @@ final class ExportDerivator implements Derivator {
               .build());
     } else {
       result = methodSpec(replicate(executableElement).addModifiers(Modifier.PUBLIC)
-          .addStatement("return $L.$L($L)", className, methodName, parameters)
+          .addStatement("return $T.$L($L)", className, methodName, parameters)
           .build());
     }
 

@@ -18,12 +18,13 @@
  */
 package org.derive4j.processor;
 
-import java.util.function.Function;
-import org.derive4j.Make;
 import org.derive4j.Makes;
 import org.derive4j.processor.api.Derivator;
+import org.derive4j.processor.api.DeriveResult;
 import org.derive4j.processor.api.DeriveUtils;
 import org.derive4j.processor.api.DerivedCodeSpec;
+import org.derive4j.processor.api.model.AlgebraicDataType;
+import org.derive4j.processor.api.model.AlgebraicDataTypes;
 
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Stream.concat;
@@ -35,25 +36,43 @@ final class BuiltinDerivator {
   private BuiltinDerivator() {
   }
 
-  static Derivator derivator(DeriveUtils deriveUtils) {
+  static Derivator<AlgebraicDataType.Variant> derivator(DeriveUtils deriveUtils) {
 
-    Derivator exportDerivator = new ExportDerivator(deriveUtils);
+    final Derivator<AlgebraicDataType.Variant> exportDerivator = new ExportDerivator(deriveUtils);
 
-    Function<Make, Derivator> makeDerivators = Makes.cases()
-        .<Derivator>lambdaVisitor_(new MapperDerivator(deriveUtils))
-        .constructors_(new StrictConstructorDerivator(deriveUtils))
-        .lazyConstructor_(new LazyConstructorDerivator(deriveUtils))
-        .casesMatching_(new PatternMatchingDerivator(deriveUtils, PatternMatchingDerivator.MatchingKind.Cases))
-        .caseOfMatching_(new PatternMatchingDerivator(deriveUtils, PatternMatchingDerivator.MatchingKind.CaseOf))
-        .getters_(new GettersDerivator(deriveUtils))
-        .modifiers_(new ModifiersDerivator(deriveUtils))
-        .catamorphism_(new CataDerivator(deriveUtils))
-        .factory_(new FactoryDerivator(deriveUtils));
+    return adt -> {
 
-    return adt -> traverseResults(
-        concat(of(exportDerivator), adt.deriveConfig().makes().stream().map(makeDerivators)).map(d -> d.derive(adt))
-            .collect(toList()))
-                .map(codeSpecList -> codeSpecList.stream().reduce(DerivedCodeSpec.none(), DerivedCodeSpec::append));
+      final var makeDerivators = AlgebraicDataTypes.caseOf(adt)
+          .adt_(Makes.cases()
+              .<Derivator<? extends AlgebraicDataType.Variant>>lambdaVisitor_(new MapperDerivator(deriveUtils))
+              .constructors_(new StrictConstructorDerivator(deriveUtils))
+              .lazyConstructor_(new LazyConstructorDerivator(deriveUtils))
+              .casesMatching_(new PatternMatchingDerivator(deriveUtils, PatternMatchingDerivator.MatchingKind.Cases))
+              .caseOfMatching_(new PatternMatchingDerivator(deriveUtils, PatternMatchingDerivator.MatchingKind.CaseOf))
+              .getters_(new GettersDerivator(deriveUtils))
+              .modifiers_(new ModifiersDerivator(deriveUtils))
+              .catamorphism_(new CataDerivator(deriveUtils))
+              .factory_(new FactoryDerivator(deriveUtils)))
+
+          .jadt_(Makes.cases()
+              .<Derivator<? extends AlgebraicDataType.Variant>>constructors_(new StrictConstructorDerivator(deriveUtils))
+              .lazyConstructor_(new LazyConstructorDerivator(deriveUtils))
+              .getters_(new GettersDerivator(deriveUtils))
+              .modifiers_(new ModifiersDerivator(deriveUtils))
+              .otherwise_(__ -> DeriveResult.result(DerivedCodeSpec.none())))
+
+          .andThen(BuiltinDerivator::invariant);
+
+      return traverseResults(
+          concat(of(exportDerivator), adt.deriveConfig().makes().stream().map(makeDerivators)).map(d -> d.derive(adt))
+              .collect(toList()))
+          .map(codeSpecList -> codeSpecList.stream().reduce(DerivedCodeSpec.none(), DerivedCodeSpec::append));
+    };
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Derivator<AlgebraicDataType.Variant> invariant(Derivator<? extends AlgebraicDataType.Variant> d) {
+    return (Derivator<AlgebraicDataType.Variant>) d;
   }
 
 }

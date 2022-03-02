@@ -20,8 +20,8 @@ package org.derive4j.processor.api;
 
 import org.derive4j.processor.api.model.AlgebraicDataType;
 
-public interface Derivator {
+public interface Derivator<T> {
 
-  DeriveResult<DerivedCodeSpec> derive(AlgebraicDataType adtModel);
+  DeriveResult<DerivedCodeSpec> derive(AlgebraicDataType<T> adtModel);
 
 }

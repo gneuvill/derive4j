@@ -43,11 +43,8 @@ import javax.lang.model.type.TypeVariable;
 import org.derive4j.processor.api.DeriveUtils;
 import org.derive4j.processor.api.EitherModel;
 import org.derive4j.processor.api.OptionModel;
-import org.derive4j.processor.api.model.AlgebraicDataType;
-import org.derive4j.processor.api.model.DataArgument;
-import org.derive4j.processor.api.model.DataConstructor;
-import org.derive4j.processor.api.model.MultipleConstructorsSupport;
-import org.derive4j.processor.api.model.TypeRestriction;
+import org.derive4j.processor.api.model.*;
+import org.derive4j.processor.api.model.AlgebraicDataType.Variant.Drv4j;
 
 import static org.derive4j.processor.Utils.joinStringsAsArguments;
 import static org.derive4j.processor.Utils.uncapitalize;
@@ -65,7 +62,7 @@ class OtherwiseMatchingStepDerivator {
   private final MapperDerivator                       mapperDerivator;
   private final PatternMatchingDerivator.MatchingKind matchingKind;
 
-  TypeSpec stepTypeSpec(AlgebraicDataType adt) {
+  TypeSpec stepTypeSpec(AlgebraicDataType<Drv4j> adt) {
 
     ParameterSpec adtParamSpec = PatternMatchingDerivator.asParameterSpec(adt);
     FieldSpec adtFieldSpec = PatternMatchingDerivator.asFieldSpec(adt);
@@ -83,14 +80,16 @@ class OtherwiseMatchingStepDerivator {
           adtParamSpec);
     }
 
-    otherwiseMatchConstructorBuilder.addParameters(adt.dataConstruction()
+    final var dataConstruction = AlgebraicDataType.getDataConstruction_(adt);
+
+    otherwiseMatchConstructorBuilder.addParameters(dataConstruction
         .constructors()
         .stream()
         .map(dc -> ParameterSpec.builder(mapperDerivator.mapperTypeName(adt, dc), MapperDerivator.mapperFieldName(dc))
             .build())
         .collect(Collectors.toList()));
 
-    otherwiseMatchBuilder.addFields(adt.dataConstruction()
+    otherwiseMatchBuilder.addFields(dataConstruction
         .constructors()
         .stream()
         .map(dc -> FieldSpec.builder(mapperDerivator.mapperTypeName(adt, dc), MapperDerivator.mapperFieldName(dc))
@@ -98,7 +97,7 @@ class OtherwiseMatchingStepDerivator {
             .build())
         .collect(Collectors.toList()));
 
-    for (DataConstructor dc : adt.dataConstruction().constructors()) {
+    for (DataConstructor dc : dataConstruction.constructors()) {
       otherwiseMatchConstructorBuilder.addStatement("this.$L = $L", MapperDerivator.mapperFieldName(dc),
           MapperDerivator.mapperFieldName(dc));
     }
@@ -113,11 +112,11 @@ class OtherwiseMatchingStepDerivator {
 
   }
 
-  private List<MethodSpec> otherwiseLeftMethod(AlgebraicDataType adt, EitherModel eitherModel) {
-
+  private List<MethodSpec> otherwiseLeftMethod(AlgebraicDataType<Drv4j> adt, EitherModel eitherModel) {
+    final var matchMethod = AlgebraicDataType.getMatchMethod_(adt);
     NameAllocator typeVarAllocator = new NameAllocator();
     adt.typeConstructor().typeVariables().forEach(tv -> typeVarAllocator.newName(tv.toString(), tv.toString()));
-    typeVarAllocator.newName(adt.matchMethod().returnTypeVariable().toString(), "match type var");
+    typeVarAllocator.newName(matchMethod.returnTypeVariable().toString(), "match type var");
 
     TypeElement eitherTypeElement = eitherModel.typeElement();
 
@@ -128,7 +127,7 @@ class OtherwiseMatchingStepDerivator {
         etv -> deriveUtils.types().isSameType(etv, eitherTypeElement.getTypeParameters().get(0).asType())
             ? Optional.of(leftTypeVarName)
             : deriveUtils.types().isSameType(etv, eitherTypeElement.getTypeParameters().get(1).asType())
-                ? Optional.of(TypeVariableName.get(adt.matchMethod().returnTypeVariable()))
+                ? Optional.of(TypeVariableName.get(matchMethod.returnTypeVariable()))
                 : Optional.empty());
 
     TypeName returnType = (matchingKind == PatternMatchingDerivator.MatchingKind.Cases)
@@ -147,7 +146,7 @@ class OtherwiseMatchingStepDerivator {
         .addTypeVariable(leftTypeVarName)
         .addParameter(ParameterizedTypeName.get(ClassName.get(f0), leftTypeVarName), arg)
         .returns(returnType)
-        .addCode(caseOf(adt.dataConstruction()).multipleConstructors(MultipleConstructorsSupport.cases()
+        .addCode(caseOf(AlgebraicDataType.getDataConstruction_(adt)).multipleConstructors(MultipleConstructorsSupport.cases()
             .visitorDispatch((visitorParam, visitorType, constructors) -> visitorDispatchEitherImpl(f0, eitherModel,
                 eitherTypeName, adt, visitorType, visitorParam, arg))
             .functionsDispatch(
@@ -166,7 +165,7 @@ class OtherwiseMatchingStepDerivator {
   }
 
   private CodeBlock functionsDispatchEitherImpl(TypeElement f0, EitherModel eitherModel, TypeName eitherTypeName,
-      AlgebraicDataType adt, List<DataConstructor> constructors, String argName) {
+      AlgebraicDataType<Drv4j> adt, List<DataConstructor> constructors, String argName) {
 
     CodeBlock.Builder codeBlock = CodeBlock.builder();
     TypeElement eitherTypeElement = eitherModel.typeElement();
@@ -208,8 +207,9 @@ class OtherwiseMatchingStepDerivator {
       template = "this.$1N";
       templateArg = PatternMatchingDerivator.asFieldSpec(adt);
     }
+    final var matchMethod = AlgebraicDataType.getMatchMethod_(adt);
     return codeBlock
-        .addStatement("return " + template + ".$2L($3L)", templateArg, adt.matchMethod().element().getSimpleName(),
+        .addStatement("return " + template + ".$2L($3L)", templateArg, matchMethod.element().getSimpleName(),
             joinStringsAsArguments(
                 constructors.stream().map(dc -> rootNameAllocator.newName(MapperDerivator.mapperFieldName(dc)))))
         .build();
@@ -217,13 +217,14 @@ class OtherwiseMatchingStepDerivator {
   }
 
   private CodeBlock visitorDispatchEitherImpl(TypeElement f0, EitherModel eitherModel, TypeName eitherTypeName,
-      AlgebraicDataType adt, DeclaredType visitorType, VariableElement visitorParam, String argName) {
+      AlgebraicDataType<Drv4j> adt, DeclaredType visitorType, VariableElement visitorParam, String argName) {
 
+    final var dataConstruction = AlgebraicDataType.getDataConstruction_(adt);
     TypeElement eitherTypeElement = eitherModel.typeElement();
     String visitorVarName = visitorParam.getSimpleName().toString();
     String adtLambdaParam = uncapitalize(adt.typeConstructor().declaredType().asElement().getSimpleName());
 
-    CodeBlock lambdaArgs = adt.dataConstruction().constructors().stream().map(dc -> {
+    CodeBlock lambdaArgs = dataConstruction.constructors().stream().map(dc -> {
       NameAllocator nameAllocator = new NameAllocator();
       nameAllocator.newName(argName, "left arg");
       nameAllocator.newName(adtLambdaParam, "adt var");
@@ -256,9 +257,11 @@ class OtherwiseMatchingStepDerivator {
     nameAllocator.newName(adtLambdaParam, "adt var");
     nameAllocator.newName(visitorVarName, "visitor var");
 
+    final var matchMethod = AlgebraicDataType.getMatchMethod_(adt);
+
     CodeBlock.Builder implBuilder = CodeBlock.builder().addStatement("$T $L = $T.$L($L)",
         deriveUtils.resolveToTypeName(visitorType,
-            tv -> deriveUtils.types().isSameType(tv, adt.matchMethod().returnTypeVariable())
+            tv -> deriveUtils.types().isSameType(tv, matchMethod.returnTypeVariable())
                 ? Optional.of(eitherTypeName)
                 : Optional.empty()),
         nameAllocator.get("visitor var"), adt.deriveConfig().targetClass().className(),
@@ -266,17 +269,18 @@ class OtherwiseMatchingStepDerivator {
 
     if (matchingKind == PatternMatchingDerivator.MatchingKind.Cases) {
       implBuilder.addStatement("return $1L -> $1L.$2L($3L)", nameAllocator.get("adt var"),
-          adt.matchMethod().element().getSimpleName(), nameAllocator.get("visitor var"));
+          matchMethod.element().getSimpleName(), nameAllocator.get("visitor var"));
     } else {
       implBuilder.addStatement("return this.$1N.$2L($3L)", PatternMatchingDerivator.asFieldSpec(adt),
-          adt.matchMethod().element().getSimpleName(), nameAllocator.get("visitor var"));
+          matchMethod.element().getSimpleName(), nameAllocator.get("visitor var"));
     }
     return implBuilder.build();
   }
 
-  private CodeBlock functionsDispatchOptionImpl(OptionModel optionModel, AlgebraicDataType adt,
+  private CodeBlock functionsDispatchOptionImpl(OptionModel optionModel, AlgebraicDataType<Drv4j> adt,
       List<DataConstructor> constructors) {
 
+    final var matchMethod = AlgebraicDataType.getMatchMethod_(adt);
     CodeBlock.Builder codeBlock = CodeBlock.builder();
 
     for (DataConstructor dc : constructors) {
@@ -296,7 +300,7 @@ class OtherwiseMatchingStepDerivator {
               Stream.of(
                   mapperDerivator.mapperTypeName(adt, dc,
                       TypeName.get(deriveUtils.types().getDeclaredType(optionModel.typeElement(),
-                          adt.matchMethod().returnTypeVariable()))),
+                          matchMethod.returnTypeVariable()))),
                   nameAllocator.get("case var"), MapperDerivator.mapperFieldName(dc),
                   ClassName.get(optionModel.typeElement()), optionModel.someConstructor().getSimpleName(),
                   deriveUtils.allAbstractMethods(dc.deconstructor().visitorType()).get(0).getSimpleName().toString(),
@@ -319,19 +323,20 @@ class OtherwiseMatchingStepDerivator {
       templateArg = PatternMatchingDerivator.asFieldSpec(adt);
     }
     return codeBlock
-        .addStatement("return " + template + ".$2L($3L)", templateArg, adt.matchMethod().element().getSimpleName(),
+        .addStatement("return " + template + ".$2L($3L)", templateArg, matchMethod.element().getSimpleName(),
             joinStringsAsArguments(constructors.stream().map(MapperDerivator::mapperFieldName)))
         .build();
 
   }
 
-  private CodeBlock visitorDispatchOptionImpl(OptionModel optionModel, AlgebraicDataType adt, DeclaredType visitorType,
+  private CodeBlock visitorDispatchOptionImpl(OptionModel optionModel, AlgebraicDataType<Drv4j> adt, DeclaredType visitorType,
       VariableElement visitorParam) {
 
+    final var dataConstruction = AlgebraicDataType.getDataConstruction_(adt);
     String visitorVarName = visitorParam.getSimpleName().toString();
     String adtLambdaParam = uncapitalize(adt.typeConstructor().declaredType().asElement().getSimpleName());
 
-    CodeBlock lambdaArgs = adt.dataConstruction().constructors().stream().map(dc -> {
+    CodeBlock lambdaArgs = dataConstruction.constructors().stream().map(dc -> {
       NameAllocator nameAllocator = new NameAllocator();
       nameAllocator.newName(adtLambdaParam, "adt var");
       nameAllocator.newName(visitorVarName, "visitor var");
@@ -345,7 +350,7 @@ class OtherwiseMatchingStepDerivator {
           .add(
               "(this.$1L != null) ? (" + lambdaArg + ") -> $2T.$3L(this.$1L.$4L(" + lambdaArg + "))\n" + ": ("
                   + lambdaArg + ") -> $2T.$5L()",
-              Stream.<Object>concat(
+              Stream.concat(
                   Stream.of(MapperDerivator.mapperFieldName(dc), ClassName.get(optionModel.typeElement()),
                       optionModel.someConstructor().getSimpleName(),
                       mapperDerivator.mapperApplyMethod(adt.deriveConfig(), dc),
@@ -362,35 +367,38 @@ class OtherwiseMatchingStepDerivator {
     nameAllocator.newName(adtLambdaParam, "adt var");
     nameAllocator.newName(visitorVarName, "visitor var");
 
+    final var matchMethod = AlgebraicDataType.getMatchMethod_(adt);
+
     CodeBlock.Builder implBuilder = CodeBlock.builder().addStatement("$T $L = $T.$L($L)",
         TypeName.get(deriveUtils.resolve(visitorType,
-            tv -> deriveUtils.types().isSameType(tv, adt.matchMethod().returnTypeVariable())
+            tv -> deriveUtils.types().isSameType(tv, matchMethod.returnTypeVariable())
                 ? Optional.of(deriveUtils.types().getDeclaredType(optionModel.typeElement(),
-                    adt.matchMethod().returnTypeVariable()))
+                    matchMethod.returnTypeVariable()))
                 : Optional.empty())),
         nameAllocator.get("visitor var"), adt.deriveConfig().targetClass().className(),
         MapperDerivator.visitorLambdaFactoryName(adt), lambdaArgs);
 
     if (matchingKind == PatternMatchingDerivator.MatchingKind.Cases) {
       implBuilder.addStatement("return $1L -> $1L.$2L($3L)", nameAllocator.get("adt var"),
-          adt.matchMethod().element().getSimpleName(), nameAllocator.get("visitor var"));
+          matchMethod.element().getSimpleName(), nameAllocator.get("visitor var"));
     } else {
       implBuilder.addStatement("return this.$1N.$2L($3L)", PatternMatchingDerivator.asFieldSpec(adt),
-          adt.matchMethod().element().getSimpleName(), nameAllocator.get("visitor var"));
+          matchMethod.element().getSimpleName(), nameAllocator.get("visitor var"));
     }
     return implBuilder.build();
 
   }
 
-  private List<MethodSpec> otherwiseMethods(AlgebraicDataType adt) {
+  private List<MethodSpec> otherwiseMethods(AlgebraicDataType<Drv4j> adt) {
 
+    final var matchMethod = AlgebraicDataType.getMatchMethod_(adt);
     TypeElement f0 = deriveUtils.function0Model(adt.deriveConfig().flavour()).samClass();
 
     TypeName returnType = (matchingKind == PatternMatchingDerivator.MatchingKind.Cases)
         ? TypeName.get(
             deriveUtils.types().getDeclaredType(deriveUtils.function1Model(adt.deriveConfig().flavour()).samClass(),
-                adt.typeConstructor().declaredType(), adt.matchMethod().returnTypeVariable()))
-        : TypeName.get(adt.matchMethod().returnTypeVariable());
+                adt.typeConstructor().declaredType(), matchMethod.returnTypeVariable()))
+        : TypeName.get(matchMethod.returnTypeVariable());
 
     return Arrays
         .asList(MethodSpec.methodBuilder("otherwise")
@@ -398,12 +406,12 @@ class OtherwiseMatchingStepDerivator {
             .addParameter(
                 ParameterSpec
                     .builder(
-                        TypeName.get(deriveUtils.types().getDeclaredType(f0, adt.matchMethod().returnTypeVariable())),
+                        TypeName.get(deriveUtils.types().getDeclaredType(f0, matchMethod.returnTypeVariable())),
                         "otherwise")
                     .build())
             .returns(returnType)
             .addCode(
-                caseOf(adt.dataConstruction())
+                caseOf(AlgebraicDataType.getDataConstruction_(adt))
                     .multipleConstructors(MultipleConstructorsSupport.cases()
                         .visitorDispatch((visitorParam, visitorType, constructors) -> visitorDispatchImpl(f0, adt,
                             visitorType, visitorParam))
@@ -414,20 +422,20 @@ class OtherwiseMatchingStepDerivator {
             .build(),
             MethodSpec.methodBuilder("otherwise_")
                 .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-                .addParameter(TypeName.get(adt.matchMethod().returnTypeVariable()),
-                    uncapitalize(adt.matchMethod().returnTypeVariable().toString()))
+                .addParameter(TypeName.get(matchMethod.returnTypeVariable()),
+                    uncapitalize(matchMethod.returnTypeVariable().toString()))
                 .addStatement("return this.$L(() -> $L)", "otherwise",
-                    uncapitalize(adt.matchMethod().returnTypeVariable().toString()))
+                    uncapitalize(matchMethod.returnTypeVariable().toString()))
                 .returns(returnType)
                 .build());
   }
 
-  private MethodSpec otherwiseNoneMethod(AlgebraicDataType adt) {
+  private MethodSpec otherwiseNoneMethod(AlgebraicDataType<Drv4j> adt) {
 
     OptionModel optionModel = deriveUtils.optionModel(adt.deriveConfig().flavour());
 
     DeclaredType optionType = deriveUtils.types().getDeclaredType(optionModel.typeElement(),
-        adt.matchMethod().returnTypeVariable());
+        AlgebraicDataType.getMatchMethod_(adt).returnTypeVariable());
 
     TypeName returnType = (matchingKind == PatternMatchingDerivator.MatchingKind.Cases)
         ? TypeName.get(
@@ -439,7 +447,7 @@ class OtherwiseMatchingStepDerivator {
         .methodBuilder("otherwise" + Utils.capitalize(optionModel.noneConstructor().getSimpleName().toString()))
         .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
         .returns(returnType)
-        .addCode(caseOf(adt.dataConstruction())
+        .addCode(caseOf(AlgebraicDataType.getDataConstruction_(adt))
             .multipleConstructors(MultipleConstructorsSupport.cases()
                 .visitorDispatch((visitorParam, visitorType, constructors) -> visitorDispatchOptionImpl(optionModel,
                     adt, visitorType, visitorParam))
@@ -450,7 +458,7 @@ class OtherwiseMatchingStepDerivator {
         .build();
   }
 
-  private CodeBlock functionsDispatchImpl(TypeElement f0, AlgebraicDataType adt, List<DataConstructor> constructors) {
+  private CodeBlock functionsDispatchImpl(TypeElement f0, AlgebraicDataType<Drv4j> adt, List<DataConstructor> constructors) {
 
     CodeBlock.Builder codeBlock = CodeBlock.builder();
 
@@ -486,19 +494,22 @@ class OtherwiseMatchingStepDerivator {
       template = "this.$1N";
       templateArg = PatternMatchingDerivator.asFieldSpec(adt);
     }
+    final var matchMethod = AlgebraicDataType.getMatchMethod_(adt);
     return codeBlock
-        .addStatement("return " + template + ".$2L($3L)", templateArg, adt.matchMethod().element().getSimpleName(),
+        .addStatement("return " + template + ".$2L($3L)", templateArg, matchMethod.element().getSimpleName(),
             joinStringsAsArguments(constructors.stream().map(MapperDerivator::mapperFieldName)))
         .build();
   }
 
-  private CodeBlock visitorDispatchImpl(TypeElement f0, AlgebraicDataType adt, DeclaredType visitorType,
+  private CodeBlock visitorDispatchImpl(TypeElement f0, AlgebraicDataType<Drv4j> adt, DeclaredType visitorType,
       VariableElement visitorParam) {
 
+    final var dataConstruction = AlgebraicDataType.getDataConstruction_(adt);
+    final var matchMethod = AlgebraicDataType.getMatchMethod_(adt);
     String visitorVarName = visitorParam.getSimpleName().toString();
     String adtLambdaParam = uncapitalize(adt.typeConstructor().declaredType().asElement().getSimpleName());
 
-    CodeBlock lambdaArgs = adt.dataConstruction().constructors().stream().map(dc -> {
+    CodeBlock lambdaArgs = dataConstruction.constructors().stream().map(dc -> {
       NameAllocator nameAllocator = new NameAllocator();
       nameAllocator.newName("otherwise", "otherwise arg");
       nameAllocator.newName(adtLambdaParam, "adt var");
@@ -529,7 +540,7 @@ class OtherwiseMatchingStepDerivator {
     nameAllocator.newName(visitorVarName, "visitor var");
 
     String typeVarArgs = Stream
-        .concat(adt.typeConstructor().typeVariables().stream(), Stream.of(adt.matchMethod().returnTypeVariable()))
+        .concat(adt.typeConstructor().typeVariables().stream(), Stream.of(matchMethod.returnTypeVariable()))
         .map(TypeVariable::toString)
         .collect(Collectors.joining(", "));
 
@@ -538,15 +549,15 @@ class OtherwiseMatchingStepDerivator {
         MapperDerivator.visitorLambdaFactoryName(adt), lambdaArgs);
     if (matchingKind == PatternMatchingDerivator.MatchingKind.Cases) {
       implBuilder.addStatement("return $1L -> $1L.$2L($3L)", nameAllocator.get("adt var"),
-          adt.matchMethod().element().getSimpleName(), nameAllocator.get("visitor var"));
+          matchMethod.element().getSimpleName(), nameAllocator.get("visitor var"));
     } else {
       implBuilder.addStatement("return this.$1N.$2L($3L)", PatternMatchingDerivator.asFieldSpec(adt),
-          adt.matchMethod().element().getSimpleName(), nameAllocator.get("visitor var"));
+          matchMethod.element().getSimpleName(), nameAllocator.get("visitor var"));
     }
     return implBuilder.build();
   }
 
-  static ParameterizedTypeName otherwiseMatcherTypeName(AlgebraicDataType adt) {
+  static ParameterizedTypeName otherwiseMatcherTypeName(AlgebraicDataType<Drv4j> adt) {
     return ParameterizedTypeName.get(ClassName.bestGuess(otherwiseBuilderClassName()),
         PatternMatchingDerivator.matcherVariables(adt).map(TypeVariableName::get).toArray(TypeName[]::new));
   }

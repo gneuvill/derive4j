@@ -38,6 +38,9 @@ import org.derive4j.processor.api.DeriveUtils;
 import org.derive4j.processor.api.DerivedCodeSpec;
 import org.derive4j.processor.api.SamInterface;
 import org.derive4j.processor.api.model.AlgebraicDataType;
+import org.derive4j.processor.api.model.AlgebraicDataType.Variant;
+import org.derive4j.processor.api.model.AlgebraicDataTypes;
+import org.derive4j.processor.api.model.MatchMethod;
 import org.derive4j.processor.api.model.TypeConstructor;
 
 import static org.derive4j.processor.Utils.optionalAsStream;
@@ -45,7 +48,7 @@ import static org.derive4j.processor.api.DeriveResult.result;
 import static org.derive4j.processor.api.DerivedCodeSpec.codeSpec;
 import static org.derive4j.processor.api.DerivedCodeSpec.none;
 
-final class LazyConstructorDerivator implements Derivator {
+final class LazyConstructorDerivator implements Derivator<Variant> {
 
   private final DeriveUtils                deriveUtils;
   private final StrictConstructorDerivator strictDerivator;
@@ -55,8 +58,17 @@ final class LazyConstructorDerivator implements Derivator {
     strictDerivator = new StrictConstructorDerivator(deriveUtils);
   }
 
-  @Override
-  public DeriveResult<DerivedCodeSpec> derive(AlgebraicDataType adt) {
+    @Override
+  public DeriveResult<DerivedCodeSpec> derive(AlgebraicDataType<Variant> adt) {
+      return AlgebraicDataTypes.caseOf(adt)
+
+          .adt((deriveConfig, typeConstructor, matchMethod, dataConstruction, fields, eq) ->
+              deriveFromAdt(Utils.coerce(adt, eq)))
+
+          .jadt_(DeriveResult.result(DerivedCodeSpec.none()));
+    }
+
+  private DeriveResult<DerivedCodeSpec> deriveFromAdt(AlgebraicDataType<Variant.Drv4j> adt) {
 
     // skip constructors for enums
     if (adt.typeConstructor().declaredType().asElement().getKind() == ElementKind.ENUM) {
@@ -77,6 +89,7 @@ final class LazyConstructorDerivator implements Derivator {
         .map(TypeVariableName::get)
         .collect(Collectors.toList());
 
+    final var matchMethod = AlgebraicDataType.getMatchMethod_(adt);
     ClassName className = ClassName.bestGuess("Lazy");
     TypeName lazyTypeName = typeVariableNames.isEmpty()
         ? className
@@ -116,10 +129,10 @@ final class LazyConstructorDerivator implements Derivator {
                 .addStatement("return evaluation")
                 .build())
             .build())
-        .addMethod(Utils.overrideMethodBuilder(adt.matchMethod().element())
+        .addMethod(Utils.overrideMethodBuilder(matchMethod.element())
             .addStatement("return (this.expression == null ? this.evaluation : _evaluate()).$L($L)",
-                adt.matchMethod().element().getSimpleName(),
-                Utils.asArgumentsStringOld(adt.matchMethod().element().getParameters()))
+                matchMethod.element().getSimpleName(),
+                Utils.asArgumentsStringOld(matchMethod.element().getParameters()))
             .build());
 
     if (adt.typeConstructor().declaredType().asElement().getKind() == ElementKind.INTERFACE) {

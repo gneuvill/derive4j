@@ -22,20 +22,19 @@ import com.squareup.javapoet.ClassName;
 import java.util.Optional;
 import org.derive4j.Data;
 import org.derive4j.ExportAsPublic;
+import org.derive4j.processor.api.model.AlgebraicDataType;
 
 @Data
-public abstract class DerivatorSelection {
-  DerivatorSelection() {
+public abstract class DerivatorSelection<T> {
+
+  interface Case<X, T> {
+    X selection(ClassName forClass, Optional<String> selector, Derivator<T> derivator);
   }
 
-  interface Case<X> {
-    X selection(ClassName forClass, Optional<String> selector, Derivator derivator);
-  }
+  public abstract <X> X match(Case<X, T> selection);
 
-  public abstract <X> X match(Case<X> selection);
-
-  @ExportAsPublic
-  static DerivatorSelection selection(ClassName forClass, Derivator derivator) {
+  //@ExportAsPublic
+  public static <T> DerivatorSelection<T> selection(ClassName forClass, Derivator<T> derivator) {
     return DerivatorSelections.selection(forClass, Optional.empty(), derivator);
   }
 }

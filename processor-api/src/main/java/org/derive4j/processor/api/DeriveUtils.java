@@ -96,14 +96,14 @@ public interface DeriveUtils {
   DeriveResult<BoundExpression> instanceInitializer(TypeElement typeElementContext, ClassName typeClassContext,
       ClassName typeClass, TypeMirror type, List<TypeElement> lowPriorityProviders);
 
-  DeriveResult<FieldsTypeClassInstanceBindingMap> resolveFieldInstances(AlgebraicDataType adt, ClassName typeClass,
+  <T> DeriveResult<FieldsTypeClassInstanceBindingMap> resolveFieldInstances(AlgebraicDataType<T> adt, ClassName typeClass,
       List<TypeElement> lowPriorityProviders);
 
   CodeBlock lambdaImpl(DataConstructor constructor, CodeBlock impl);
 
   CodeBlock lambdaImpl(DataConstructor constructor, String suffix, CodeBlock impl);
 
-  DeriveResult<DerivedCodeSpec> generateInstance(AlgebraicDataType adt, ClassName typeClass,
+  <T> DeriveResult<DerivedCodeSpec> generateInstance(AlgebraicDataType<T> adt, ClassName typeClass,
       List<TypeElement> lowPriorityProviders, Function<InstanceUtils, DerivedCodeSpec> generateInstance);
 
   CodeBlock parameterList(DataConstructor constructor);

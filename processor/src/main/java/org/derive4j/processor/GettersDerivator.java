@@ -41,12 +41,13 @@ import org.derive4j.processor.api.DeriveUtils;
 import org.derive4j.processor.api.DerivedCodeSpec;
 import org.derive4j.processor.api.OptionModel;
 import org.derive4j.processor.api.model.*;
+import org.derive4j.processor.api.model.AlgebraicDataType.Variant;
 
 import static org.derive4j.processor.Utils.*;
 import static org.derive4j.processor.api.DeriveResult.result;
 import static org.derive4j.processor.api.model.DataConstructions.caseOf;
 
-final class GettersDerivator implements Derivator {
+final class GettersDerivator implements Derivator<Variant> {
 
   private final DeriveUtils deriveUtils;
 
@@ -55,20 +56,28 @@ final class GettersDerivator implements Derivator {
   }
 
   @Override
-  public DeriveResult<DerivedCodeSpec> derive(AlgebraicDataType adt) {
+  public DeriveResult<DerivedCodeSpec> derive(AlgebraicDataType<Variant> adt) {
+    return AlgebraicDataTypes.caseOf(adt)
+        .adt((deriveConfig, typeConstructor, matchMethod, dataConstruction, fields, eq) ->
+            deriveFromAdt(Utils.coerce(adt, eq)))
+
+        .jadt_(result(DerivedCodeSpec.none()));
+  }
+
+  private DeriveResult<DerivedCodeSpec> deriveFromAdt(AlgebraicDataType<Variant.Drv4j> adt) {
 
     return result(
         adt.fields().stream().map(da -> deriveGetter(da, adt)).reduce(DerivedCodeSpec.none(), DerivedCodeSpec::append));
   }
 
-  private DerivedCodeSpec deriveGetter(DataArgument field, AlgebraicDataType adt) {
+  private DerivedCodeSpec deriveGetter(DataArgument field, AlgebraicDataType<Variant.Drv4j> adt) {
 
-    return isLens(field, adt.dataConstruction().constructors())
+    return isLens(field, AlgebraicDataType.getDataConstruction_(adt).constructors())
         ? generateLensGetter(field, adt)
         : generateOptionalGetter(field, adt);
   }
 
-  private DerivedCodeSpec generateOptionalGetter(DataArgument field, AlgebraicDataType adt) {
+  private DerivedCodeSpec generateOptionalGetter(DataArgument field, AlgebraicDataType<Variant.Drv4j> adt) {
 
     String arg = asParameterName(adt);
 
@@ -77,22 +86,23 @@ final class GettersDerivator implements Derivator {
     DeclaredType returnType = deriveUtils.types().getDeclaredType(optionModel.typeElement(),
         field.type().accept(asBoxedType, deriveUtils.types()));
 
-    return caseOf(adt.dataConstruction()).multipleConstructors(MultipleConstructorsSupport.cases()
-        .visitorDispatch((visitorParam, visitorType, constructors) -> visitorDispatchOptionalGetterImpl(optionModel,
-            adt, visitorType, constructors, arg, field, returnType))
-        .functionsDispatch(constructors -> functionsDispatchOptionalGetterImpl(optionModel, adt, arg, constructors,
-            field, returnType)))
+    return caseOf(AlgebraicDataType.getDataConstruction_(adt))
+        .multipleConstructors(MultipleConstructorsSupport.cases()
+            .visitorDispatch((visitorParam, visitorType, constructors) -> visitorDispatchOptionalGetterImpl(optionModel,
+                adt, visitorType, constructors, arg, field, returnType))
+            .functionsDispatch(constructors -> functionsDispatchOptionalGetterImpl(optionModel, adt, arg, constructors,
+                field, returnType)))
         .otherwise(DerivedCodeSpec::none);
   }
 
-  private DerivedCodeSpec visitorDispatchOptionalGetterImpl(OptionModel optionModel, AlgebraicDataType adt,
+  private DerivedCodeSpec visitorDispatchOptionalGetterImpl(OptionModel optionModel, AlgebraicDataType<Variant.Drv4j> adt,
       DeclaredType visitorType, List<DataConstructor> constructors, String arg, DataArgument field,
       DeclaredType returnType) {
 
     final Function<TypeVariable, Optional<TypeMirror>> returnTypeArg = tv -> adt
       .matchMethod()
       .map(MatchMethod::returnTypeVariable)
-      .filter(p(curry(deriveUtils.types()::isSameType, tv)))
+      .filter(p_(curry(deriveUtils.types()::isSameType, tv)))
       .map(constant(returnType));
 
     final Function<TypeVariable, Optional<TypeMirror>> otherTypeArgs = tv -> Optional
@@ -106,15 +116,12 @@ final class GettersDerivator implements Derivator {
             MapperDerivator.visitorLambdaFactoryName(adt), optionalGetterLambdas(arg, optionModel, constructors, field))
         .build();
 
-    final String getterName = AlgebraicDataTypes.caseOf(adt)
-      .adt((deriveConfig, typeConstructor, matchMethod, dataConstruction, fields) -> matchMethod.element().getSimpleName())
-      .jadt();
-
+    final var matchMethod = AlgebraicDataType.getMatchMethod_(adt);
     MethodSpec getter;
 
     if (adt.typeConstructor().typeVariables().isEmpty()) {
       getter = getterBuilder(adt, arg, field, returnType)
-          .addStatement("return $L.$L($L)", arg, adt.matchMethod().element().getSimpleName(), getterField.name)
+          .addStatement("return $L.$L($L)", arg, matchMethod.element().getSimpleName(), getterField.name)
           .build();
     } else {
       getter = getterBuilder(adt, arg, field, returnType)
@@ -122,7 +129,7 @@ final class GettersDerivator implements Derivator {
               .addMember("value", "{$S, $S}", "unchecked", "rawtypes")
               .build())
           .addStatement("return ($T) $L.$L(($T) $L)", TypeName.get(returnType), arg,
-              adt.matchMethod().element().getSimpleName(), TypeName.get(deriveUtils.types().erasure(visitorType)),
+              matchMethod.element().getSimpleName(), TypeName.get(deriveUtils.types().erasure(visitorType)),
               getterField.name)
           .build();
 
@@ -131,11 +138,11 @@ final class GettersDerivator implements Derivator {
     return DerivedCodeSpec.codeSpec(getterField, getter);
   }
 
-  private DerivedCodeSpec generateLensGetter(DataArgument field, AlgebraicDataType adt) {
+  private DerivedCodeSpec generateLensGetter(DataArgument field, AlgebraicDataType<Variant.Drv4j> adt) {
 
     String arg = asParameterName(adt);
 
-    return caseOf(adt.dataConstruction())
+    return caseOf(AlgebraicDataType.getDataConstruction_(adt))
         .multipleConstructors(MultipleConstructorsSupport.cases()
             .visitorDispatch((visitorParam, visitorType, constructors) -> visitorDispatchLensGetterImpl(adt, arg,
                 visitorType, field))
@@ -144,11 +151,13 @@ final class GettersDerivator implements Derivator {
         .noConstructor(DerivedCodeSpec::none);
   }
 
-  private DerivedCodeSpec visitorDispatchLensGetterImpl(AlgebraicDataType adt, String arg, DeclaredType visitorType,
+  private DerivedCodeSpec visitorDispatchLensGetterImpl(AlgebraicDataType<Variant.Drv4j> adt, String arg, DeclaredType visitorType,
       DataArgument field) {
 
+    final var matchMethod = AlgebraicDataType.getMatchMethod_(adt);
+
     Function<TypeVariable, Optional<TypeMirror>> returnTypeArg = tv -> deriveUtils.types().isSameType(tv,
-        adt.matchMethod().returnTypeVariable())
+        matchMethod.returnTypeVariable())
             ? Optional.of(asBoxedType.visit(field.type(), deriveUtils.types()))
             : Optional.empty();
 
@@ -167,7 +176,7 @@ final class GettersDerivator implements Derivator {
 
     if (adt.typeConstructor().typeVariables().isEmpty()) {
       getter = getterBuilder(adt, arg, field, field.type())
-          .addStatement("return $L.$L($L)", arg, adt.matchMethod().element().getSimpleName(), getterField.name)
+          .addStatement("return $L.$L($L)", arg, matchMethod.element().getSimpleName(), getterField.name)
           .build();
     } else {
 
@@ -176,7 +185,7 @@ final class GettersDerivator implements Derivator {
               .addMember("value", "{$S, $S}", "unchecked", "rawtypes")
               .build())
           .addStatement("return ($T) $L.$L(($T) $L)", TypeName.get(field.type()), arg,
-              adt.matchMethod().element().getSimpleName(), TypeName.get(deriveUtils.types().erasure(visitorType)),
+              matchMethod.element().getSimpleName(), TypeName.get(deriveUtils.types().erasure(visitorType)),
               getterField.name)
           .build();
 
@@ -185,17 +194,17 @@ final class GettersDerivator implements Derivator {
     return DerivedCodeSpec.codeSpec(getterField, getter);
   }
 
-  private static DerivedCodeSpec functionsDispatchOptionalGetterImpl(OptionModel optionModel, AlgebraicDataType adt,
+  private static DerivedCodeSpec functionsDispatchOptionalGetterImpl(OptionModel optionModel, AlgebraicDataType<Variant.Drv4j> adt,
       String arg, List<DataConstructor> constructors, DataArgument field, DeclaredType returnType) {
 
     return DerivedCodeSpec.methodSpec(getterBuilder(adt, arg, field, returnType).addCode(CodeBlock.builder()
-        .add("return $L.$L(", arg, adt.matchMethod().element().getSimpleName())
+        .add("return $L.$L(", arg, AlgebraicDataType.getMatchMethod_(adt).element().getSimpleName())
         .add(optionalGetterLambdas(arg, optionModel, constructors, field))
         .add(");")
         .build()).build());
   }
 
-  private static MethodSpec.Builder getterBuilder(AlgebraicDataType adt, String arg, DataArgument field,
+  private static MethodSpec.Builder getterBuilder(AlgebraicDataType<Variant.Drv4j> adt, String arg, DataArgument field,
       TypeMirror type) {
 
     return MethodSpec.methodBuilder("get" + Utils.capitalize(field.fieldName()))
@@ -231,19 +240,19 @@ final class GettersDerivator implements Derivator {
         CodeBlock.builder().build());
   }
 
-  private static DerivedCodeSpec functionsDispatchLensGetterImpl(AlgebraicDataType adt, String arg,
+  private static DerivedCodeSpec functionsDispatchLensGetterImpl(AlgebraicDataType<Variant.Drv4j> adt, String arg,
       DataArgument field) {
 
     return DerivedCodeSpec.methodSpec(getterBuilder(adt, arg, field, field.type()).addStatement("return $L.$L($L)", arg,
-        adt.matchMethod().element().getSimpleName(), lensGetterLambda(arg, adt, field)).build());
+        AlgebraicDataType.getMatchMethod_(adt).element().getSimpleName(), lensGetterLambda(arg, adt, field)).build());
   }
 
-  private static String lensGetterLambda(String arg, AlgebraicDataType adt, DataArgument field) {
+  private static String lensGetterLambda(String arg, AlgebraicDataType<Variant.Drv4j> adt, DataArgument field) {
 
     NameAllocator nameAllocator = new NameAllocator();
     nameAllocator.newName(arg);
 
-    return joinStringsAsArguments(adt.dataConstruction()
+    return joinStringsAsArguments(AlgebraicDataType.getDataConstruction_(adt)
         .constructors()
         .stream()
         .map(dc -> '('
@@ -255,7 +264,7 @@ final class GettersDerivator implements Derivator {
             + ") -> " + nameAllocator.clone().newName(field.fieldName(), field.fieldName() + " field")));
   }
 
-  private static String asParameterName(AlgebraicDataType adt) {
+  private static String asParameterName(AlgebraicDataType<Variant.Drv4j> adt) {
 
     return Utils.uncapitalize(adt.typeConstructor().typeElement().getSimpleName().toString());
   }
