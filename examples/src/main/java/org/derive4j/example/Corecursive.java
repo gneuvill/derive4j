@@ -29,7 +29,7 @@ public abstract class Corecursive<A> {
 
   public static Corecursive<Integer> range(final int from, int toExclusive) {
 
-    return nu(from, s -> (s == toExclusive) ? Steps.done() : Steps.yield(s, s + 1));
+    return nu(from, s -> (s == toExclusive) ? Steps.done() : Steps._yield(s, s + 1));
   }
 
   public static <A> Corecursive<A> mu(Mu<A> mu) {
@@ -121,7 +121,7 @@ public abstract class Corecursive<A> {
   @Data(flavour = Flavour.FJ)
   abstract static class Step<A, S> {
 
-    abstract <X> X match(F0<X> done, @FieldNames({ "value", "stepper" }) F2<A, S, X> yield);
+    abstract <X> X match(F0<X> done, @FieldNames({ "value", "stepper" }) F2<A, S, X> _yield);
   }
 
   abstract static class Mu<A> {

@@ -165,6 +165,10 @@ final class Utils {
     return fold(o, Stream.<A>empty(), Stream::of);
   }
 
+  static <A, B> Function<Stream<A>, Stream<B>> lift(Function<A, B> f) {
+    return as -> as.map(f);
+  }
+
   static <K, V> Optional<V> get(K key, Map<? extends K, ? extends V> map) {
     return Optional.ofNullable(map.get(key));
   }

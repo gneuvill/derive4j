@@ -40,14 +40,8 @@ import org.derive4j.processor.api.Derivator;
 import org.derive4j.processor.api.DeriveResult;
 import org.derive4j.processor.api.DeriveUtils;
 import org.derive4j.processor.api.DerivedCodeSpec;
-import org.derive4j.processor.api.model.AlgebraicDataType;
+import org.derive4j.processor.api.model.*;
 import org.derive4j.processor.api.model.AlgebraicDataType.Variant.Drv4j;
-import org.derive4j.processor.api.model.DataArgument;
-import org.derive4j.processor.api.model.DataConstructions;
-import org.derive4j.processor.api.model.DataConstructor;
-import org.derive4j.processor.api.model.DeriveConfig;
-import org.derive4j.processor.api.model.MultipleConstructorsSupport;
-import org.derive4j.processor.api.model.TypeRestriction;
 
 import static java.util.stream.Stream.concat;
 import static org.derive4j.processor.Utils.asTypeElement;
@@ -65,7 +59,7 @@ class MapperDerivator implements Derivator<Drv4j> {
 
   public static String visitorLambdaFactoryName(AlgebraicDataType<Drv4j> adt) {
 
-    return AlgebraicDataType.getMatchMethod_(adt).element().getParameters().get(0).getSimpleName().toString();
+    return AlgebraicDataTypes.getMatchMethod_(adt).element().getParameters().get(0).getSimpleName().toString();
   }
 
   private final DeriveUtils deriveUtils;
@@ -73,7 +67,7 @@ class MapperDerivator implements Derivator<Drv4j> {
   @Override
   public DeriveResult<DerivedCodeSpec> derive(AlgebraicDataType<Drv4j> adt) {
 
-    return DeriveResult.result(DataConstructions.caseOf(AlgebraicDataType.getDataConstruction_(adt))
+    return DeriveResult.result(DataConstructions.caseOf(AlgebraicDataTypes.getDataConstruction_(adt))
         .multipleConstructors(MultipleConstructorsSupport.cases()
             .visitorDispatch((visitorParam, visitorType, constructors) -> createVisitorFactoryAndMappers(adt,
                 visitorType, constructors))
@@ -93,7 +87,7 @@ class MapperDerivator implements Derivator<Drv4j> {
 
   public TypeName mapperTypeName(AlgebraicDataType<Drv4j> adt, DataConstructor dc) {
 
-    return mapperTypeName(adt, dc, TypeVariableName.get(AlgebraicDataType.getMatchMethod_(adt).returnTypeVariable()));
+    return mapperTypeName(adt, dc, TypeVariableName.get(AlgebraicDataTypes.getMatchMethod_(adt).returnTypeVariable()));
   }
 
   public TypeName visitorMapperTypeName(AlgebraicDataType<Drv4j> adt, DataConstructor dc) {
@@ -145,7 +139,7 @@ class MapperDerivator implements Derivator<Drv4j> {
                 Map.Entry::getValue,
                 (v1, v2) -> v1));
 
-    return AlgebraicDataType.getDataConstruction_(adt).isVisitorDispatch()
+    return AlgebraicDataTypes.getDataConstruction_(adt).isVisitorDispatch()
         ? argsTypeNames.length == 0
             ? ParameterizedTypeName
                 .get(ClassName.get(deriveUtils.function0Model(adt.deriveConfig().flavour()).samClass()), returnType)
@@ -173,7 +167,7 @@ class MapperDerivator implements Derivator<Drv4j> {
                 .stream()
                 .map(t -> deriveUtils.types().isSameType(t, adt.typeConstructor().declaredType())
                     ? TypeName.get(selfReferenceType)
-                    : deriveUtils.types().isSameType(AlgebraicDataType.getMatchMethod_(adt).returnTypeVariable(), t)
+                    : deriveUtils.types().isSameType(AlgebraicDataTypes.getMatchMethod_(adt).returnTypeVariable(), t)
                         ? returnType
                         : TypeName.get(t))
                 .toArray(TypeName[]::new));
@@ -243,7 +237,7 @@ class MapperDerivator implements Derivator<Drv4j> {
         .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
         .addTypeVariables(
             adt.typeConstructor().typeVariables().stream().map(TypeVariableName::get).collect(Collectors.toList()))
-        .addTypeVariable(TypeVariableName.get(AlgebraicDataType.getMatchMethod_(adt).returnTypeVariable()))
+        .addTypeVariable(TypeVariableName.get(AlgebraicDataTypes.getMatchMethod_(adt).returnTypeVariable()))
         .addParameters(constructors.stream()
             .map(dc -> ParameterSpec.builder(mapperTypeName(adt, dc), mapperFieldName(dc)).build())
             .collect(Collectors.toList()))

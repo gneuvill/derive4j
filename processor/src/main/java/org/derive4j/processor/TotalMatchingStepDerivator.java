@@ -22,6 +22,7 @@ import com.squareup.javapoet.*;
 import org.derive4j.processor.api.DeriveUtils;
 import org.derive4j.processor.api.model.AlgebraicDataType;
 import org.derive4j.processor.api.model.AlgebraicDataType.Variant.Drv4j;
+import org.derive4j.processor.api.model.AlgebraicDataTypes;
 import org.derive4j.processor.api.model.DataConstructor;
 import org.derive4j.processor.api.model.MultipleConstructorsSupport;
 
@@ -57,7 +58,7 @@ class TotalMatchingStepDerivator {
   TypeSpec stepTypeSpec(AlgebraicDataType<Drv4j> adt, List<DataConstructor> previousConstructors,
       DataConstructor currentConstructor, List<DataConstructor> nextConstructors) {
 
-    final var matchMethod = AlgebraicDataType.getMatchMethod_(adt);
+    final var matchMethod = AlgebraicDataTypes.getMatchMethod_(adt);
     TypeVariableName returnTypeVarName = TypeVariableName.get(matchMethod.returnTypeVariable());
 
     TypeSpec.Builder totalMatchBuilder = TypeSpec.classBuilder(totalMatchBuilderClassName(currentConstructor))
@@ -128,7 +129,7 @@ class TotalMatchingStepDerivator {
                   adt.typeConstructor().declaredType(), matchMethod.returnTypeVariable()))
           : TypeName.get(matchMethod.returnTypeVariable());
 
-      currentConstructorTotalMatchMethod.returns(returnType).addCode(caseOf(AlgebraicDataType.getDataConstruction_(adt))
+      currentConstructorTotalMatchMethod.returns(returnType).addCode(caseOf(AlgebraicDataTypes.getDataConstruction_(adt))
           .multipleConstructors(MultipleConstructorsSupport.cases()
               .visitorDispatch((visitorParam, visitorType, constructors) -> vistorDispatchImpl(adt, visitorType,
                   visitorParam, previousConstructors, currentConstructor))
@@ -206,7 +207,7 @@ class TotalMatchingStepDerivator {
       template = "((" + OtherwiseMatchingStepDerivator.otherwiseMatcherTypeName(adt).toString() + ") this).$1N";
       templateArg = PatternMatchingDerivator.asFieldSpec(adt);
     }
-    final var matchMethod = AlgebraicDataType.getMatchMethod_(adt);
+    final var matchMethod = AlgebraicDataTypes.getMatchMethod_(adt);
     return codeBlock
         .addStatement("return " + template + ".$2L($3L)", templateArg, matchMethod.element().getSimpleName(),
             joinStringsAsArguments(Stream.concat(previousConstructors.stream().map(MapperDerivator::mapperFieldName),
@@ -217,7 +218,7 @@ class TotalMatchingStepDerivator {
   private CodeBlock vistorDispatchImpl(AlgebraicDataType<Drv4j> adt, DeclaredType visitorType, VariableElement visitorParam,
       List<DataConstructor> previousConstructors, DataConstructor currentConstructor) {
 
-    final var matchMethod = AlgebraicDataType.getMatchMethod_(adt);
+    final var matchMethod = AlgebraicDataTypes.getMatchMethod_(adt);
     String visitorVarName = visitorParam.getSimpleName().toString();
     String adtLambdaParam = uncapitalize(adt.typeConstructor().declaredType().asElement().getSimpleName());
 
@@ -258,7 +259,7 @@ class TotalMatchingStepDerivator {
   }
 
   private static CodeBlock oneConstructorImpl(DataConstructor currentConstructor, AlgebraicDataType<Drv4j> adt) {
-    final var matchMethod = AlgebraicDataType.getMatchMethod_(adt);
+    final var matchMethod = AlgebraicDataTypes.getMatchMethod_(adt);
     NameAllocator nameAllocator = new NameAllocator();
     nameAllocator.newName(MapperDerivator.mapperFieldName(currentConstructor),
         MapperDerivator.mapperFieldName(currentConstructor));

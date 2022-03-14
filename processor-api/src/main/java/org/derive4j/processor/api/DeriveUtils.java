@@ -38,6 +38,7 @@ import javax.lang.model.util.Types;
 import org.derive4j.Flavour;
 import org.derive4j.processor.api.model.AlgebraicDataType;
 import org.derive4j.processor.api.model.DataConstructor;
+import org.derive4j.processor.api.model.JRecord;
 import org.derive4j.processor.api.model.TypeRestriction;
 
 public interface DeriveUtils {
@@ -102,6 +103,8 @@ public interface DeriveUtils {
   CodeBlock lambdaImpl(DataConstructor constructor, CodeBlock impl);
 
   CodeBlock lambdaImpl(DataConstructor constructor, String suffix, CodeBlock impl);
+
+  CodeBlock caseImpl(JRecord record, Function<String, CodeBlock> impl);
 
   <T> DeriveResult<DerivedCodeSpec> generateInstance(AlgebraicDataType<T> adt, ClassName typeClass,
       List<TypeElement> lowPriorityProviders, Function<InstanceUtils, DerivedCodeSpec> generateInstance);

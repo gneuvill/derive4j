@@ -32,11 +32,8 @@ import org.derive4j.processor.api.Derivator;
 import org.derive4j.processor.api.DeriveResult;
 import org.derive4j.processor.api.DeriveUtils;
 import org.derive4j.processor.api.DerivedCodeSpec;
-import org.derive4j.processor.api.model.AlgebraicDataType;
+import org.derive4j.processor.api.model.*;
 import org.derive4j.processor.api.model.AlgebraicDataType.Variant.Drv4j;
-import org.derive4j.processor.api.model.DataConstructions;
-import org.derive4j.processor.api.model.DataConstructor;
-import org.derive4j.processor.api.model.MultipleConstructorsSupport;
 
 import static java.util.stream.Collectors.toList;
 
@@ -52,7 +49,7 @@ final class FactoryDerivator implements Derivator<Drv4j> {
 
   @Override
   public DeriveResult<DerivedCodeSpec> derive(AlgebraicDataType<Drv4j> adt) {
-    return DeriveResult.result(DataConstructions.caseOf(AlgebraicDataType.getDataConstruction_(adt))
+    return DeriveResult.result(DataConstructions.caseOf(AlgebraicDataTypes.getDataConstruction_(adt))
         .multipleConstructors(
             MultipleConstructorsSupport.cases()
                 .visitorDispatch(
@@ -69,7 +66,7 @@ final class FactoryDerivator implements Derivator<Drv4j> {
     String methodName = "factory";
 
     DeclaredType factoryType = utils.resolve(visitorType,
-        tv -> Optional.of(utils.types().isSameType(AlgebraicDataType.getMatchMethod_(adt).returnTypeVariable(), tv)
+        tv -> Optional.of(utils.types().isSameType(AlgebraicDataTypes.getMatchMethod_(adt).returnTypeVariable(), tv)
             ? adt.typeConstructor().declaredType()
             : tv));
 

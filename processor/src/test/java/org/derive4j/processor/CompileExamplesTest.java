@@ -96,7 +96,7 @@ public class CompileExamplesTest {
 
   @Test
   public void compile_Jadts() {
-    checkCompileOf("jadt/Address.java");
+    checkCompileOf("jadt/Address.java", "jadt/Either.java");
   }
 
   private static void checkCompileOf(String... exampleFiles) {

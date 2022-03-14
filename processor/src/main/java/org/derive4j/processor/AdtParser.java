@@ -27,18 +27,19 @@ import org.derive4j.processor.api.model.AlgebraicDataType.Variant.Drv4j;
 import org.derive4j.processor.api.model.AlgebraicDataType.Variant.Java;
 
 import javax.lang.model.element.*;
-import javax.lang.model.type.DeclaredType;
-import javax.lang.model.type.ExecutableType;
-import javax.lang.model.type.TypeMirror;
-import javax.lang.model.type.TypeVariable;
+import javax.lang.model.type.*;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
 import java.util.*;
 import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static java.util.Collections.emptyList;
+import static java.util.function.Predicate.not;
 import static org.derive4j.processor.P2.p2;
 import static org.derive4j.processor.Utils.*;
 import static org.derive4j.processor.api.DeriveMessages.message;
@@ -93,85 +94,153 @@ final class AdtParser {
                 : parseADT(adtTypeElement, deriveConfig, declaredType, adtTypeVariables).map(__ -> __)));
   }
 
-    private DeriveResult<AlgebraicDataType<Drv4j>> parseADT(TypeElement adtTypeElement, DeriveConfig deriveConfig,
-        DeclaredType declaredType, List<TypeVariable> adtTypeVariables) {
-        return fold(
-            findOnlyOne(deriveUtils.allAbstractMethods(declaredType)
-                            .stream()
-                            .filter(p(this::isEqualHashcodeToString).negate())
-                            .collect(Collectors.toList())),
-            error(message("One, and only one, abstract method should be define on the data type",
-                          deriveUtils.allAbstractMethods(declaredType).stream().map(MessageLocalization::onElement).collect(
-                              Collectors.toList()))),
+  private DeriveResult<AlgebraicDataType<Drv4j>> parseADT(TypeElement adtTypeElement, DeriveConfig deriveConfig,
+      DeclaredType declaredType, List<TypeVariable> adtTypeVariables) {
+    return fold(
+        findOnlyOne(deriveUtils.allAbstractMethods(declaredType)
+            .stream()
+            .filter(p(this::isEqualHashcodeToString).negate())
+            .collect(Collectors.toList())),
+        error(message("One, and only one, abstract method should be define on the data type",
+            deriveUtils.allAbstractMethods(declaredType).stream().map(MessageLocalization::onElement).collect(
+                Collectors.toList()))),
 
-            adtAcceptMethod -> fold(
-                findOnlyOne(adtAcceptMethod.getTypeParameters()).filter(t -> findOnlyOne(t.getBounds())
-                    .filter(b -> types.isSameType(deriveUtils.object().classModel().asType(), b))
-                    .isPresent()).map(TypeParameterElement::asType).flatMap(asTypeVariable::visit).filter(
-                    tv -> types.isSameType(tv, adtAcceptMethod.getReturnType())),
-                error(message(
-                    "Method must have one, and only one, type variable (without bounds) that should also be the method "
-                        + "return type.",
-                    onElement(adtAcceptMethod))),
+        adtAcceptMethod -> fold(
+            findOnlyOne(adtAcceptMethod.getTypeParameters()).filter(t -> findOnlyOne(t.getBounds())
+                .filter(b -> types.isSameType(deriveUtils.object().classModel().asType(), b))
+                .isPresent()).map(TypeParameterElement::asType).flatMap(asTypeVariable::visit).filter(
+                tv -> types.isSameType(tv, adtAcceptMethod.getReturnType())),
+            error(message(
+                "Method must have one, and only one, type variable (without bounds) that should also be the method "
+                    + "return type.",
+                onElement(adtAcceptMethod))),
 
-                expectedReturnType ->
-                    parseDataConstruction(declaredType, adtTypeVariables, adtAcceptMethod, expectedReturnType)
-                        .bind(dc -> validateFieldTypeUniformity(dc)
-                            .map(fields -> adt(deriveConfig,
-                                               typeConstructor(adtTypeElement, declaredType, adtTypeVariables),
-                                               matchMethod(adtAcceptMethod, expectedReturnType),
-                                               dc,
-                                               fields)))));
-    }
+            expectedReturnType ->
+                parseDataConstruction(declaredType, adtTypeVariables, adtAcceptMethod, expectedReturnType)
+                    .bind(dc -> validateFieldTypeUniformity(dc)
+                        .map(fields -> adt(deriveConfig,
+                            typeConstructor(adtTypeElement, declaredType, adtTypeVariables),
+                            matchMethod(adtAcceptMethod, expectedReturnType),
+                            dc,
+                            fields)))));
+  }
 
-  private DeriveResult<AlgebraicDataType<Java>>  parseJADT(TypeElement adtTypeElement, DeriveConfig deriveConfig, DeclaredType declaredType, List<TypeVariable> adtTypeVariables) {
-    return result(AlgebraicDataTypes.jadt(deriveConfig,
-                                          typeConstructor(adtTypeElement, declaredType, adtTypeVariables),
-                                          null));
+  private DeriveResult<AlgebraicDataType<Java>>  parseJADT(TypeElement adtTypeElement, DeriveConfig deriveConfig,
+      DeclaredType declaredType, List<TypeVariable> adtTypeVariables) {
+    return parseJDataConstruction(adtTypeElement, declaredType, adtTypeVariables)
+        .bind(jdc -> validateFieldTypeUniformity(jdc)
+            .map(fields -> AlgebraicDataTypes
+                .jadt(deriveConfig
+                    , typeConstructor(adtTypeElement, declaredType, adtTypeVariables)
+                    , jdc
+                    , fields)));
+  }
+
+  private DeriveResult<JDataConstruction> parseJDataConstruction(TypeElement adtTypeElt, DeclaredType declaredType,
+      List<TypeVariable> adtTypeVbs) {
+
+    return switch (adtTypeElt.getKind()) {
+
+      case RECORD -> ancestors(adtTypeElt).anyMatch(te -> te
+          .getPermittedSubclasses()
+          .stream()
+          .anyMatch(p_(curry(types::isSameType, declaredType))))
+          ? error(message("Data annotated records can't appear in the permitted subtypes of another type", onElement(adtTypeElt)))
+          : result(JDataConstructions.oneConstructor(JRecords.JRecord(adtTypeElt)));
+
+      case INTERFACE -> {
+        final var permittedSubTypes = adtTypeElt
+            .getPermittedSubclasses()
+            .stream()
+            .flatMap(tm -> deriveUtils.asTypeElement(tm).stream())
+            .toList();
+
+        yield permittedSubTypes
+            .stream()
+            .anyMatch(te -> te.getKind() != ElementKind.RECORD)
+            ? error(message("Data annotated sealed interfaces permit records only", onElement(adtTypeElt)))
+            : result(JDataConstructions.multipleConstructors(permittedSubTypes.stream().map(JRecords::JRecord).toList()));
+      }
+
+      default -> { throw new Error("The impossible has happened"); }
+    };
+  }
+
+  private Stream<TypeElement> ancestors(TypeElement te) {
+    return te.getInterfaces().stream()
+        .flatMap(tm -> deriveUtils.asTypeElement(tm).stream()
+            .flatMap(te_ -> Stream.concat(Stream.of(te_), ancestors(te_))));
   }
 
   private DeriveResult<List<DataArgument>> validateFieldTypeUniformity(DataConstruction construction) {
-
     return caseOf(construction)
-
-        .multipleConstructors(multipleConstructors -> {
-
-          Map<String, List<DataArgument>> fieldsMap = multipleConstructors.constructors()
-              .stream()
-              .flatMap(c -> c.arguments().stream())
-              .collect(Collectors.groupingBy(DataArgument::fieldName));
-
-          List<String> fieldsWithNonUniformType = fieldsMap.entrySet()
-              .stream()
-              .filter(
-                  e -> e.getValue().stream().anyMatch(da -> !types.isSameType(da.type(), e.getValue().get(0).type())))
-              .map(Map.Entry::getKey)
-              .collect(Collectors.toList());
-
-          DeriveResult<List<DataArgument>> res = !fieldsWithNonUniformType.isEmpty()
-              ? error(
-                  message("Field(s) " + fieldsWithNonUniformType + " should have uniform type across all constructors"))
-              : result(multipleConstructors.constructors()
-                  .stream()
-                  .flatMap(c -> c.arguments().stream().map(DataArgument::fieldName))
-                  .distinct()
-                  .map(fieldName -> fieldsMap.get(fieldName).get(0))
-                  .collect(Collectors.toList()));
-          return res;
-        })
+        .multipleConstructors(mcs -> validateFieldTypeUniformity_(mcs.constructors()
+            , DataConstructor::arguments
+            , DataArgument::fieldName
+            , DataArgument::type
+            , Function.identity()))
 
         .oneConstructor(constructor -> result(constructor.arguments()))
 
         .noConstructor(() -> result(emptyList()));
   }
 
-  private boolean isEqualHashcodeToString(ExecutableElement executableElement) {
+  private DeriveResult<List<DataArgument>> validateFieldTypeUniformity(JDataConstruction construction) {
+    return JDataConstructions.caseOf(construction)
+        .multipleConstructors(records -> validateFieldTypeUniformity_(records
+            , JRecords::getComponents
+            , RecordComponentElement::getSimpleName
+            , RecordComponentElement::asType
+            , AdtParser::toDataArg))
 
-    return elements.overrides(executableElement, deriveUtils.object().equalsMethod(), deriveUtils.object().classModel())
-        || elements.overrides(executableElement, deriveUtils.object().hashCodeMethod(),
-            deriveUtils.object().classModel())
-        || elements.overrides(executableElement, deriveUtils.object().toStringMethod(),
-            deriveUtils.object().classModel());
+        .oneConstructor(record -> result(JRecords
+            .getComponents(record)
+            .stream()
+            .map(AdtParser::toDataArg)
+            .toList()));
+  }
+
+  private <S, T> DeriveResult<List<DataArgument>> validateFieldTypeUniformity_(List<S> source
+      , Function<S, List<T>> getFields
+      , Function<T, CharSequence> getFieldName
+      , Function<T, TypeMirror> getFieldType
+      , Function<T, DataArgument> toDataArg) {
+          final var fieldsMap = source
+              .stream()
+              .flatMap(getFields.andThen(Collection::stream))
+              .collect(Collectors.groupingBy(getFieldName));
+
+          final var fieldsWithNonUniformType = fieldsMap
+              .entrySet()
+              .stream()
+              .filter(e -> e.getValue().stream().anyMatch(not(c ->
+                  types.isSameType(getFieldType.apply(c), getFieldType.apply(e.getValue().get(0))))))
+              .map(Map.Entry::getKey)
+              .toList();
+
+          return !fieldsWithNonUniformType.isEmpty()
+              ? DeriveResult.<List<DataArgument>>error(
+                  message("Field(s) " + fieldsWithNonUniformType + " should have uniform type across all constructors"))
+              : result(source
+                  .stream()
+                  .flatMap(getFields.andThen(Collection::stream).andThen(lift(getFieldName)))
+                  .distinct()
+                  .map(f(fieldsMap::get).andThen(l -> l.get(0)).andThen(toDataArg))
+                  .toList());
+  }
+
+  private static DataArgument toDataArg(RecordComponentElement component) {
+    return DataArguments.dataArgument(component.getSimpleName().toString(), component.asType());
+  }
+
+  private boolean isEqualHashcodeToString(ExecutableElement executableElement) {
+    return overrides(executableElement, deriveUtils.object().equalsMethod())
+        || overrides(executableElement, deriveUtils.object().hashCodeMethod())
+        || overrides(executableElement, deriveUtils.object().toStringMethod());
+  }
+
+  private boolean overrides(ExecutableElement overrider, ExecutableElement overridee) {
+    return elements.overrides(overrider, overridee, deriveUtils.object().classModel());
   }
 
   private DeriveResult<DataConstruction> parseDataConstruction(DeclaredType adtDeclaredType,

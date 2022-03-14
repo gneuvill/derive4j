@@ -72,7 +72,7 @@ final class GettersDerivator implements Derivator<Variant> {
 
   private DerivedCodeSpec deriveGetter(DataArgument field, AlgebraicDataType<Variant.Drv4j> adt) {
 
-    return isLens(field, AlgebraicDataType.getDataConstruction_(adt).constructors())
+    return isLens(field, AlgebraicDataTypes.getDataConstruction_(adt).constructors())
         ? generateLensGetter(field, adt)
         : generateOptionalGetter(field, adt);
   }
@@ -86,7 +86,7 @@ final class GettersDerivator implements Derivator<Variant> {
     DeclaredType returnType = deriveUtils.types().getDeclaredType(optionModel.typeElement(),
         field.type().accept(asBoxedType, deriveUtils.types()));
 
-    return caseOf(AlgebraicDataType.getDataConstruction_(adt))
+    return caseOf(AlgebraicDataTypes.getDataConstruction_(adt))
         .multipleConstructors(MultipleConstructorsSupport.cases()
             .visitorDispatch((visitorParam, visitorType, constructors) -> visitorDispatchOptionalGetterImpl(optionModel,
                 adt, visitorType, constructors, arg, field, returnType))
@@ -116,7 +116,7 @@ final class GettersDerivator implements Derivator<Variant> {
             MapperDerivator.visitorLambdaFactoryName(adt), optionalGetterLambdas(arg, optionModel, constructors, field))
         .build();
 
-    final var matchMethod = AlgebraicDataType.getMatchMethod_(adt);
+    final var matchMethod = AlgebraicDataTypes.getMatchMethod_(adt);
     MethodSpec getter;
 
     if (adt.typeConstructor().typeVariables().isEmpty()) {
@@ -142,7 +142,7 @@ final class GettersDerivator implements Derivator<Variant> {
 
     String arg = asParameterName(adt);
 
-    return caseOf(AlgebraicDataType.getDataConstruction_(adt))
+    return caseOf(AlgebraicDataTypes.getDataConstruction_(adt))
         .multipleConstructors(MultipleConstructorsSupport.cases()
             .visitorDispatch((visitorParam, visitorType, constructors) -> visitorDispatchLensGetterImpl(adt, arg,
                 visitorType, field))
@@ -154,7 +154,7 @@ final class GettersDerivator implements Derivator<Variant> {
   private DerivedCodeSpec visitorDispatchLensGetterImpl(AlgebraicDataType<Variant.Drv4j> adt, String arg, DeclaredType visitorType,
       DataArgument field) {
 
-    final var matchMethod = AlgebraicDataType.getMatchMethod_(adt);
+    final var matchMethod = AlgebraicDataTypes.getMatchMethod_(adt);
 
     Function<TypeVariable, Optional<TypeMirror>> returnTypeArg = tv -> deriveUtils.types().isSameType(tv,
         matchMethod.returnTypeVariable())
@@ -198,7 +198,7 @@ final class GettersDerivator implements Derivator<Variant> {
       String arg, List<DataConstructor> constructors, DataArgument field, DeclaredType returnType) {
 
     return DerivedCodeSpec.methodSpec(getterBuilder(adt, arg, field, returnType).addCode(CodeBlock.builder()
-        .add("return $L.$L(", arg, AlgebraicDataType.getMatchMethod_(adt).element().getSimpleName())
+        .add("return $L.$L(", arg, AlgebraicDataTypes.getMatchMethod_(adt).element().getSimpleName())
         .add(optionalGetterLambdas(arg, optionModel, constructors, field))
         .add(");")
         .build()).build());
@@ -244,7 +244,7 @@ final class GettersDerivator implements Derivator<Variant> {
       DataArgument field) {
 
     return DerivedCodeSpec.methodSpec(getterBuilder(adt, arg, field, field.type()).addStatement("return $L.$L($L)", arg,
-        AlgebraicDataType.getMatchMethod_(adt).element().getSimpleName(), lensGetterLambda(arg, adt, field)).build());
+        AlgebraicDataTypes.getMatchMethod_(adt).element().getSimpleName(), lensGetterLambda(arg, adt, field)).build());
   }
 
   private static String lensGetterLambda(String arg, AlgebraicDataType<Variant.Drv4j> adt, DataArgument field) {
@@ -252,7 +252,7 @@ final class GettersDerivator implements Derivator<Variant> {
     NameAllocator nameAllocator = new NameAllocator();
     nameAllocator.newName(arg);
 
-    return joinStringsAsArguments(AlgebraicDataType.getDataConstruction_(adt)
+    return joinStringsAsArguments(AlgebraicDataTypes.getDataConstruction_(adt)
         .constructors()
         .stream()
         .map(dc -> '('

@@ -19,7 +19,7 @@
 package org.derive4j.processor.api.model;
 
 import org.derive4j.Data;
-//import org.derive4j.ExportAsPublic;
+import org.derive4j.ExportAsPublic;
 import org.derive4j.hkt.TypeEq;
 import org.derive4j.hkt.__;
 import org.derive4j.processor.api.model.AlgebraicDataType.Variant.Drv4j;
@@ -39,7 +39,8 @@ public abstract class AlgebraicDataType<T> implements __<AlgebraicDataType.µ, T
   public interface Cases<R, T> {
     R adt(DeriveConfig deriveConfig, TypeConstructor typeConstructor, MatchMethod matchMethod,
         DataConstruction dataConstruction, List<DataArgument> fields, TypeEq<Drv4j, T> eq);
-    R jadt(DeriveConfig deriveConfig, TypeConstructor typeConstructor, List<DataArgument> fields, TypeEq<Java, T> eq);
+    R jadt(DeriveConfig deriveConfig, TypeConstructor typeConstructor,
+        JDataConstruction jDataConstruction, List<DataArgument> fields, TypeEq<Java, T> eq);
   }
 
   AlgebraicDataType() {
@@ -71,15 +72,21 @@ public abstract class AlgebraicDataType<T> implements __<AlgebraicDataType.µ, T
     return AlgebraicDataTypes.getFields(this);
   }
 
-  //@ExportAsPublic
+  @ExportAsPublic
   @SuppressWarnings("OptionalGetWithoutIsPresent")
-  public static MatchMethod getMatchMethod_(AlgebraicDataType<Drv4j> adt) {
+  static MatchMethod getMatchMethod_(AlgebraicDataType<Drv4j> adt) {
     return AlgebraicDataTypes.getMatchMethod(adt).get();
   }
 
-  //@ExportAsPublic
+  @ExportAsPublic
   @SuppressWarnings("OptionalGetWithoutIsPresent")
-  public static DataConstruction getDataConstruction_(AlgebraicDataType<Drv4j> adt) {
+  static DataConstruction getDataConstruction_(AlgebraicDataType<Drv4j> adt) {
     return AlgebraicDataTypes.getDataConstruction(adt).get();
+  }
+
+  @ExportAsPublic
+  @SuppressWarnings("OptionalGetWithoutIsPresent")
+  static JDataConstruction getJDataConstruction_(AlgebraicDataType<Java> adt) {
+    return AlgebraicDataTypes.getJDataConstruction(adt).get();
   }
 }

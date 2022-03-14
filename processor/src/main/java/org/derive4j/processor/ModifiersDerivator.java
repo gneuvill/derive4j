@@ -74,8 +74,8 @@ final class ModifiersDerivator implements Derivator<Variant> {
 
   private DerivedCodeSpec generateModifier(DataArgument field, AlgebraicDataType<Variant.Drv4j> adt) {
 
-    final var dataConstruction = AlgebraicDataType.getDataConstruction_(adt);
-    final var matchMethod = AlgebraicDataType.getMatchMethod_(adt);
+    final var dataConstruction = AlgebraicDataTypes.getDataConstruction_(adt);
+    final var matchMethod = AlgebraicDataTypes.getMatchMethod_(adt);
     String moderArg = field.fieldName() + "Mod";
     TypeElement f1 = deriveUtils.function1Model(adt.deriveConfig().flavour()).samClass();
     String f1Apply = deriveUtils.allAbstractMethods(f1).get(0).getSimpleName().toString();
@@ -85,7 +85,7 @@ final class ModifiersDerivator implements Derivator<Variant> {
     Function<TypeVariable, Optional<TypeName>> polymorphism = tv -> uniqueTypeVariables.stream()
         .filter(utv -> deriveUtils.types().isSameType(tv, utv))
         .findFirst()
-        .map(utv -> TypeVariableName.get(matchMethod.returnTypeVariable().toString() + utv.toString()));
+        .map(utv -> TypeVariableName.get(matchMethod.returnTypeVariable().toString() + utv));
 
     TypeMirror boxedFieldType = field.type().accept(Utils.asBoxedType, deriveUtils.types());
 

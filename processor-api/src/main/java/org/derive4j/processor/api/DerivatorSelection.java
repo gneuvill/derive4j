@@ -33,7 +33,7 @@ public abstract class DerivatorSelection<T> {
 
   public abstract <X> X match(Case<X, T> selection);
 
-  //@ExportAsPublic
+  @ExportAsPublic
   public static <T> DerivatorSelection<T> selection(ClassName forClass, Derivator<T> derivator) {
     return DerivatorSelections.selection(forClass, Optional.empty(), derivator);
   }

@@ -44,11 +44,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import javax.lang.model.SourceVersion;
-import javax.lang.model.element.ElementKind;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.Modifier;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.element.VariableElement;
+import javax.lang.model.element.*;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.ExecutableType;
 import javax.lang.model.type.TypeKind;
@@ -582,6 +578,18 @@ final class DeriveUtilsImpl implements DeriveUtils {
   }
 
   @Override
+  public CodeBlock caseImpl(JRecord record, Function<String, CodeBlock> impl) {
+    final var elt = JRecords.getElement(record);
+    final var caseVarName = uncapitalize(elt.getSimpleName());
+
+    return CodeBlock.builder()
+        .beginControlFlow("case $T $N -> ", elt, caseVarName)
+        .add(impl.apply(caseVarName))
+        .endControlFlow()
+        .build();
+  }
+
+  @Override
   public <T> DeriveResult<DerivedCodeSpec> generateInstance(AlgebraicDataType<T> adt, ClassName typeClass,
       List<TypeElement> lowPriorityProviders, Function<InstanceUtils, DerivedCodeSpec> generateInstance) {
 
@@ -589,7 +597,7 @@ final class DeriveUtilsImpl implements DeriveUtils {
 
         fieldsTypeClassInstanceBindingMap -> generateInstance.apply(new InstanceUtils() {
 
-          List<FreeVariable> freeVariables = getFreeVariables(fieldsTypeClassInstanceBindingMap);
+          final List<FreeVariable> freeVariables = getFreeVariables(fieldsTypeClassInstanceBindingMap);
 
           final String methodName = generatedInstanceMethodName(findTypeElement(typeClass).get(),
               adt.typeConstructor().typeElement());
@@ -612,9 +620,10 @@ final class DeriveUtilsImpl implements DeriveUtils {
           @Override
           public DerivedCodeSpec generateInstanceFactory(CodeBlock statement, CodeBlock... statements) {
 
-            ParameterizedTypeName returnType = ParameterizedTypeName.get(typeClass,
+            final ParameterizedTypeName returnType = ParameterizedTypeName.get(typeClass,
                 TypeName.get(adt.typeConstructor().declaredType()));
-            MethodSpec.Builder method = MethodSpec.methodBuilder(methodName)
+
+            final MethodSpec.Builder method = MethodSpec.methodBuilder(methodName)
                 .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
                 .addTypeVariables(
                     adt.typeConstructor().typeVariables().stream().map(TypeVariableName::get).collect(toList()))
@@ -623,16 +632,21 @@ final class DeriveUtilsImpl implements DeriveUtils {
                     .map(fv -> fv.variable((type, name) -> ParameterSpec.builder(TypeName.get(type), name).build()))
                     .collect(toList()));
 
-            List<FieldSpec> fieldSpecs = new ArrayList<>();
+            final List<FieldSpec> fieldSpecs = new ArrayList<>();
 
             if (freeVariables.isEmpty()) {
-              fieldSpecs.add(FieldSpec.builder(typeClass, methodName, Modifier.PRIVATE, Modifier.STATIC)
-                  .addAnnotation(
-                      AnnotationSpec.builder(SuppressWarnings.class).addMember("value", "$S", "rawtypes").build())
+              fieldSpecs
+                  .add(FieldSpec.builder(typeClass, methodName, Modifier.PRIVATE, Modifier.STATIC)
+                      .addAnnotation(AnnotationSpec.builder(SuppressWarnings.class)
+                          .addMember("value", "$S", "rawtypes")
+                          .build())
                   .build());
-              method.addAnnotation(AnnotationSpec.builder(SuppressWarnings.class)
-                  .addMember("value", "{$S, $S}", "rawtypes", "unchecked")
-                  .build()).addStatement("$1T _$2L = $2L", returnType, methodName).beginControlFlow("if (_$L == null)",
+
+              method
+                  .addAnnotation(AnnotationSpec.builder(SuppressWarnings.class)
+                      .addMember("value", "{$S, $S}", "rawtypes", "unchecked")
+                      .build())
+                  .addStatement("$1T _$2L = $2L", returnType, methodName).beginControlFlow("if (_$L == null)",
                       methodName);
             }
 
@@ -703,7 +717,29 @@ final class DeriveUtilsImpl implements DeriveUtils {
                       .add(useVisitorFactory ? "))" : ")")
                       .build();
                 })
-                .jadt_(CodeBlock.of(""));
+                .otherwise_(CodeBlock.of(""));
+          }
+
+          @Override
+          public CodeBlock switchImpl(Function<JRecord, CodeBlock> caseImpl) {
+            return AlgebraicDataTypes.caseOf(adt)
+                .jadt((deriveConfig, typeConstructor, jDataConstruction, fields, eq) ->
+                    JDataConstructions.caseOf(jDataConstruction)
+
+                        .multipleConstructors(records -> CodeBlock
+                            .builder()
+                            .beginControlFlow("switch($N)", adtVariableName())
+                            .add(records
+                                .stream()
+                                .map(caseImpl)
+                                .reduce((cb1, cb2) -> cb1.toBuilder().add("\n").add(cb2).build())
+                                .orElse(CodeBlock.of("")))
+                            .endControlFlow()
+                            .build())
+
+                        .oneConstructor(caseImpl))
+
+                .otherwise_(CodeBlock.of(""));
           }
 
           @Override

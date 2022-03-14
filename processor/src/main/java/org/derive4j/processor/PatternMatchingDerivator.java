@@ -40,6 +40,7 @@ import org.derive4j.processor.api.DeriveUtils;
 import org.derive4j.processor.api.DerivedCodeSpec;
 import org.derive4j.processor.api.model.AlgebraicDataType;
 import org.derive4j.processor.api.model.AlgebraicDataType.Variant.Drv4j;
+import org.derive4j.processor.api.model.AlgebraicDataTypes;
 import org.derive4j.processor.api.model.DataConstructor;
 
 import static org.derive4j.processor.Utils.fold;
@@ -91,7 +92,7 @@ class PatternMatchingDerivator implements Derivator<Drv4j> {
   @Override
   public DeriveResult<DerivedCodeSpec> derive(AlgebraicDataType<Drv4j> adt) {
 
-    List<DataConstructor> constructors = AlgebraicDataType.getDataConstruction_(adt).constructors();
+    List<DataConstructor> constructors = AlgebraicDataTypes.getDataConstruction_(adt).constructors();
 
     return ((matchingKind == MatchingKind.CaseOf) && (constructors.size() <= 1))
         ? DeriveResult.result(DerivedCodeSpec.none())
@@ -172,7 +173,7 @@ class PatternMatchingDerivator implements Derivator<Drv4j> {
   static MethodSpec.Builder constantMatchMethodBuilder(AlgebraicDataType<Drv4j> adt, DataConstructor currentConstructor) {
 
     NameAllocator nameAllocator = new NameAllocator();
-    final var matchMethod = AlgebraicDataType.getMatchMethod_(adt);
+    final var matchMethod = AlgebraicDataTypes.getMatchMethod_(adt);
     String argName = uncapitalize(matchMethod.returnTypeVariable().toString());
     return MethodSpec.methodBuilder(currentConstructor.name() + '_')
         .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
@@ -184,7 +185,7 @@ class PatternMatchingDerivator implements Derivator<Drv4j> {
   static Stream<TypeVariable> matcherVariables(AlgebraicDataType<Drv4j> adt) {
 
     return Stream.concat(adt.typeConstructor().typeVariables().stream(),
-        Stream.of(AlgebraicDataType.getMatchMethod_(adt).returnTypeVariable()));
+        Stream.of(AlgebraicDataTypes.getMatchMethod_(adt).returnTypeVariable()));
   }
 
   static ParameterSpec asParameterSpec(AlgebraicDataType<Drv4j> adt) {

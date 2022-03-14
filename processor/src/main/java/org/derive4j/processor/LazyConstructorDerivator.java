@@ -18,30 +18,18 @@
  */
 package org.derive4j.processor;
 
-import com.squareup.javapoet.ClassName;
-import com.squareup.javapoet.CodeBlock;
-import com.squareup.javapoet.FieldSpec;
-import com.squareup.javapoet.MethodSpec;
-import com.squareup.javapoet.ParameterSpec;
-import com.squareup.javapoet.ParameterizedTypeName;
-import com.squareup.javapoet.TypeName;
-import com.squareup.javapoet.TypeSpec;
-import com.squareup.javapoet.TypeVariableName;
-import java.util.List;
-import java.util.stream.Collectors;
-import javax.lang.model.element.ElementKind;
-import javax.lang.model.element.Modifier;
-import javax.lang.model.element.TypeElement;
-import org.derive4j.processor.api.Derivator;
-import org.derive4j.processor.api.DeriveResult;
-import org.derive4j.processor.api.DeriveUtils;
-import org.derive4j.processor.api.DerivedCodeSpec;
-import org.derive4j.processor.api.SamInterface;
+import com.squareup.javapoet.*;
+import org.derive4j.processor.api.*;
 import org.derive4j.processor.api.model.AlgebraicDataType;
 import org.derive4j.processor.api.model.AlgebraicDataType.Variant;
 import org.derive4j.processor.api.model.AlgebraicDataTypes;
-import org.derive4j.processor.api.model.MatchMethod;
 import org.derive4j.processor.api.model.TypeConstructor;
+
+import javax.lang.model.element.ElementKind;
+import javax.lang.model.element.Modifier;
+import javax.lang.model.element.TypeElement;
+import java.util.List;
+import java.util.stream.Collectors;
 
 import static org.derive4j.processor.Utils.optionalAsStream;
 import static org.derive4j.processor.api.DeriveResult.result;
@@ -89,7 +77,7 @@ final class LazyConstructorDerivator implements Derivator<Variant> {
         .map(TypeVariableName::get)
         .collect(Collectors.toList());
 
-    final var matchMethod = AlgebraicDataType.getMatchMethod_(adt);
+    final var matchMethod = AlgebraicDataTypes.getMatchMethod_(adt);
     ClassName className = ClassName.bestGuess("Lazy");
     TypeName lazyTypeName = typeVariableNames.isEmpty()
         ? className

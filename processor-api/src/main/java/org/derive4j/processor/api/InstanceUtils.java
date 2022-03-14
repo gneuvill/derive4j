@@ -19,9 +19,14 @@
 package org.derive4j.processor.api;
 
 import com.squareup.javapoet.CodeBlock;
+
+import java.util.List;
 import java.util.function.Function;
 import org.derive4j.processor.api.model.DataArgument;
 import org.derive4j.processor.api.model.DataConstructor;
+import org.derive4j.processor.api.model.JRecord;
+
+import javax.lang.model.element.RecordComponentElement;
 
 public interface InstanceUtils {
 
@@ -30,6 +35,8 @@ public interface InstanceUtils {
   DerivedCodeSpec generateInstanceFactory(CodeBlock statement, CodeBlock... statements);
 
   CodeBlock matchImpl(Function<DataConstructor, CodeBlock> lambdaImpl);
+
+  CodeBlock switchImpl(Function<JRecord, CodeBlock> caseImpl);
 
   CodeBlock instanceFor(DataArgument da);
 

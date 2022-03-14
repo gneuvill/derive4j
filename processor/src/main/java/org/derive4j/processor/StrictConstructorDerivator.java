@@ -134,7 +134,7 @@ final class StrictConstructorDerivator implements Derivator<Variant> {
   }
 
   private Optional<MethodSpec> deriveHashCode(AlgebraicDataType<Drv4j> adt, DataConstructor constructor) {
-    final var dataConstruction = AlgebraicDataType.getDataConstruction_(adt);
+    final var dataConstruction = AlgebraicDataTypes.getDataConstruction_(adt);
 
     int nbConstructors = dataConstruction.constructors().size();
     int constructorIndex = IntStream.range(0, nbConstructors)
@@ -172,8 +172,8 @@ final class StrictConstructorDerivator implements Derivator<Variant> {
 
   private Optional<MethodSpec> deriveEquals(AlgebraicDataType<Drv4j> adt, DataConstructor constructor) {
 
-    final var dataConstruction = AlgebraicDataType.getDataConstruction_(adt);
-    final var matchMethod = AlgebraicDataType.getMatchMethod_(adt);
+    final var dataConstruction = AlgebraicDataTypes.getDataConstruction_(adt);
+    final var matchMethod = AlgebraicDataTypes.getMatchMethod_(adt);
 
     return findAbstractEquals(adt.typeConstructor().typeElement()).map(abstractEquals -> {
       VariableElement objectParam = abstractEquals.getParameters().get(0);
@@ -284,7 +284,7 @@ final class StrictConstructorDerivator implements Derivator<Variant> {
                 .build())
             .collect(Collectors.toList()))
         .addMethod(constructorBuilder.build())
-        .addMethod(deriveUtils.overrideMethodBuilder(AlgebraicDataType.getMatchMethod_(adt).element(), constructor.returnedType())
+        .addMethod(deriveUtils.overrideMethodBuilder(AlgebraicDataTypes.getMatchMethod_(adt).element(), constructor.returnedType())
             .addStatement("return $L.$L($L)", constructor.deconstructor().visitorParam().getSimpleName(),
                 constructor.deconstructor().method().getSimpleName(),
                 Utils.asArgumentsString(constructor.arguments(), constructor.typeRestrictions()))
@@ -389,7 +389,7 @@ final class StrictConstructorDerivator implements Derivator<Variant> {
   private static String equalityTest(DataArgument da) {
 
     String thisField = "this." + da.fieldName();
-    return da.type().accept(new TypeKindVisitor8<String, String>() {
+    return da.type().accept(new TypeKindVisitor8<>() {
 
       @Override
       public String visitTypeVariable(TypeVariable t, String p) {
@@ -432,7 +432,7 @@ final class StrictConstructorDerivator implements Derivator<Variant> {
 
   private static String hascode(DataArgument da) {
 
-    return da.type().accept(new TypeKindVisitor8<String, String>() {
+    return da.type().accept(new TypeKindVisitor8<>() {
 
       @Override
       public String visitArray(final ArrayType t, final String p) {
@@ -498,7 +498,7 @@ final class StrictConstructorDerivator implements Derivator<Variant> {
 
   private static String toString(DataArgument da) {
 
-    return da.type().accept(new TypeKindVisitor8<String, String>() {
+    return da.type().accept(new TypeKindVisitor8<>() {
 
       @Override
       public String visitArray(final ArrayType t, final String p) {
