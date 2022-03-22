@@ -44,8 +44,8 @@ allprojects {
         primaryEmail = "jb@giraudeau.info"
 
         dependencyJavaPoet = "com.squareup:javapoet:1.11.1"
-        dependencyPreviousDerive4J = "org.derive4j:derive4j:1.1.1"
-        dependencyHkt = "org.derive4j.hkt:hkt:0.10.0-SNAPSHOT"
+        dependencyPreviousDerive4J = "org.derive4j:derive4j:1.1.1" // ExportAsPublic is broken in this version ; a fix in a 1.1.2 version is needed
+        dependencyHkt = "org.derive4j.hkt:hkt:0.10.0-SNAPSHOT" // 0.10.0 just need to be published
         dependencyJunit = "junit:junit:4.12"
         dependencyAutoService = "com.google.auto.service:auto-service:1.0-rc5"
 
@@ -71,7 +71,7 @@ artifactoryPublish.skip = true
 
 subprojects {
 
-    apply plugin: "java"
+    apply plugin: "java-library"
     apply plugin: "maven-publish"
     apply plugin: "com.github.ben-manes.versions"
     apply plugin: "com.github.hierynomus.license"
@@ -109,12 +109,21 @@ subprojects {
     }
 
     String licenseName =
-        project.name == "processor" ? gplLicenseName : project.name == "examples" ? bsd3LicenseName : lgplLicenseName 
+        project.name == "processor" ? gplLicenseName : project.name == "examples" ? bsd3LicenseName : lgplLicenseName
+
+    String archiveName = "${project.projectName}${project.name == 'processor' ? '' : '-' + project.name}"
+
+    jar {
+        manifest {
+            attributes('Automatic-Module-Name': archiveName.replaceAll('-', '.'))
+        }
+    }
     
     publishing {
         publications {
             maven(MavenPublication) {
                 from components.java
+                artifactId = archiveName
                 pom {
                     name = pomProjectName
                     description = projectDescription

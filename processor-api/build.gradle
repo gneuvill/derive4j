@@ -3,9 +3,9 @@ pomProjectName = "Derive4J - Annotation Processor API"
 archivesBaseName = "${project.projectName}-${project.name}"
 
 dependencies {
-  implementation project(":annotation")
-  implementation dependencyHkt
-  implementation dependencyJavaPoet
+  api project(":annotation")
+  api dependencyHkt
+  api dependencyJavaPoet
   testImplementation dependencyJunit
   annotationProcessor dependencyPreviousDerive4J
   annotationProcessor dependencyHkt
