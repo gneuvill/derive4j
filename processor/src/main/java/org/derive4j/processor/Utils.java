@@ -169,6 +169,10 @@ final class Utils {
     return as -> as.map(f);
   }
 
+  static <A, B, C> Function<P2<A, B>, C> tuple(BiFunction<A, B, C> f) {
+    return pair -> f.apply(pair._1(), pair._2());
+  }
+
   static <K, V> Optional<V> get(K key, Map<? extends K, ? extends V> map) {
     return Optional.ofNullable(map.get(key));
   }

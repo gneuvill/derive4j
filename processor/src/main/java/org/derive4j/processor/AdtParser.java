@@ -146,7 +146,7 @@ final class AdtParser {
           .stream()
           .anyMatch(p_(curry(types::isSameType, declaredType))))
           ? error(message("Data annotated records can't appear in the permitted subtypes of another type", onElement(adtTypeElt)))
-          : result(JDataConstructions.oneConstructor(JRecords.JRecord(adtTypeElt)));
+          : result(JDataConstructions.oneConstructor(JRecords.JRecord(adtTypeElt, 0)));
 
       case INTERFACE -> {
         final var permittedSubTypes = adtTypeElt
@@ -159,7 +159,10 @@ final class AdtParser {
             .stream()
             .anyMatch(te -> te.getKind() != ElementKind.RECORD)
             ? error(message("Data annotated sealed interfaces permit records only", onElement(adtTypeElt)))
-            : result(JDataConstructions.multipleConstructors(permittedSubTypes.stream().map(JRecords::JRecord).toList()));
+            : result(JDataConstructions.multipleConstructors(zipWithIndex(permittedSubTypes)
+              .stream()
+              .map(tuple(JRecords::JRecord))
+              .toList()));
       }
 
       default -> { throw new Error("The impossible has happened"); }
@@ -167,7 +170,8 @@ final class AdtParser {
   }
 
   private Stream<TypeElement> ancestors(TypeElement te) {
-    return te.getInterfaces().stream()
+    return Stream
+        .concat(Stream.of(te.getSuperclass()), te.getInterfaces().stream())
         .flatMap(tm -> deriveUtils.asTypeElement(tm).stream()
             .flatMap(te_ -> Stream.concat(Stream.of(te_), ancestors(te_))));
   }

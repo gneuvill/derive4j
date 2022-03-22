@@ -37,6 +37,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.function.BinaryOperator;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -578,18 +579,6 @@ final class DeriveUtilsImpl implements DeriveUtils {
   }
 
   @Override
-  public CodeBlock caseImpl(JRecord record, Function<String, CodeBlock> impl) {
-    final var elt = JRecords.getElement(record);
-    final var caseVarName = uncapitalize(elt.getSimpleName());
-
-    return CodeBlock.builder()
-        .beginControlFlow("case $T $N -> ", elt, caseVarName)
-        .add(impl.apply(caseVarName))
-        .endControlFlow()
-        .build();
-  }
-
-  @Override
   public <T> DeriveResult<DerivedCodeSpec> generateInstance(AlgebraicDataType<T> adt, ClassName typeClass,
       List<TypeElement> lowPriorityProviders, Function<InstanceUtils, DerivedCodeSpec> generateInstance) {
 
@@ -598,6 +587,12 @@ final class DeriveUtilsImpl implements DeriveUtils {
         fieldsTypeClassInstanceBindingMap -> generateInstance.apply(new InstanceUtils() {
 
           final List<FreeVariable> freeVariables = getFreeVariables(fieldsTypeClassInstanceBindingMap);
+
+          final NameAllocator na = new NameAllocator();
+          {
+            freeVariables.stream().map(FreeVariables::getName).forEach(na::newName);
+            adt.fields().stream().map(DataArguments::getFieldName).forEach(na::newName);
+          }
 
           final String methodName = generatedInstanceMethodName(findTypeElement(typeClass).get(),
               adt.typeConstructor().typeElement());
@@ -721,23 +716,30 @@ final class DeriveUtilsImpl implements DeriveUtils {
           }
 
           @Override
-          public CodeBlock switchImpl(Function<JRecord, CodeBlock> caseImpl) {
+          public CodeBlock switchImpl(String switchVar, BiFunction<String, JRecord, CodeBlock> caseImpl) {
+            na.newName(switchVar); // consume switchVar name
+
             return AlgebraicDataTypes.caseOf(adt)
-                .jadt((deriveConfig, typeConstructor, jDataConstruction, fields, eq) ->
-                    JDataConstructions.caseOf(jDataConstruction)
+                .jadt((deriveConfig, typeConstructor, jDataConstruction, fields, eq) -> CodeBlock
+                    .builder()
+                    .add("switch($N) {\n", switchVar)
+                    .indent()
+                    .add(jDataConstruction.constructors()
+                      .stream()
+                      .map(rec -> {
+                        final var elt = JRecords.getElement(rec);
+                        final var caseVarName = na.newName(uncapitalize(elt.getSimpleName()));
 
-                        .multipleConstructors(records -> CodeBlock
-                            .builder()
-                            .beginControlFlow("switch($N)", adtVariableName())
-                            .add(records
-                                .stream()
-                                .map(caseImpl)
-                                .reduce((cb1, cb2) -> cb1.toBuilder().add("\n").add(cb2).build())
-                                .orElse(CodeBlock.of("")))
-                            .endControlFlow()
-                            .build())
-
-                        .oneConstructor(caseImpl))
+                        return CodeBlock.builder()
+                          .add("case $T $N -> ", elt, caseVarName)
+                          .add(caseImpl.apply(caseVarName, rec))
+                          .build();
+                      })
+                      .reduce((cb1, cb2) -> cb1.toBuilder().add("\n").add(cb2).build())
+                      .orElse(CodeBlock.of("")))
+                    .unindent()
+                    .add("}")
+                    .build())
 
                 .otherwise_(CodeBlock.of(""));
           }
@@ -757,9 +759,6 @@ final class DeriveUtilsImpl implements DeriveUtils {
 
           @Override
           public String adtVariableName() {
-            NameAllocator na = new NameAllocator();
-            freeVariables.stream().map(FreeVariables::getName).forEach(na::newName);
-            adt.fields().stream().map(DataArguments::getFieldName).forEach(na::newName);
             return na.newName(uncapitalize(adt.typeConstructor().typeElement().getSimpleName().toString()));
           }
         }));

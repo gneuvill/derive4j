@@ -104,8 +104,6 @@ public interface DeriveUtils {
 
   CodeBlock lambdaImpl(DataConstructor constructor, String suffix, CodeBlock impl);
 
-  CodeBlock caseImpl(JRecord record, Function<String, CodeBlock> impl);
-
   <T> DeriveResult<DerivedCodeSpec> generateInstance(AlgebraicDataType<T> adt, ClassName typeClass,
       List<TypeElement> lowPriorityProviders, Function<InstanceUtils, DerivedCodeSpec> generateInstance);
 

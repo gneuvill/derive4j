@@ -21,6 +21,7 @@ package org.derive4j.processor.api;
 import com.squareup.javapoet.CodeBlock;
 
 import java.util.List;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import org.derive4j.processor.api.model.DataArgument;
 import org.derive4j.processor.api.model.DataConstructor;
@@ -36,7 +37,7 @@ public interface InstanceUtils {
 
   CodeBlock matchImpl(Function<DataConstructor, CodeBlock> lambdaImpl);
 
-  CodeBlock switchImpl(Function<JRecord, CodeBlock> caseImpl);
+  CodeBlock switchImpl(String switchVar, BiFunction<String, JRecord, CodeBlock> caseImpl);
 
   CodeBlock instanceFor(DataArgument da);
 

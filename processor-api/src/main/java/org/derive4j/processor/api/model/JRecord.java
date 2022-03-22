@@ -12,13 +12,13 @@ public abstract class JRecord {
     JRecord() {}
 
     interface Cases<R> {
-        R JRecord(TypeElement element, List<RecordComponentElement> components);
+        R JRecord(TypeElement element, int index, List<RecordComponentElement> components);
     }
     abstract <R> R match(Cases<R> cases);
 
     @ExportAsPublic
     @SuppressWarnings("unchecked")
-    static JRecord JRecord(TypeElement element) {
-        return JRecords.JRecord(element, (List<RecordComponentElement>) element.getRecordComponents());
+    static JRecord JRecord(TypeElement element, int index) {
+        return JRecords.JRecord(element, index, (List<RecordComponentElement>) element.getRecordComponents());
     }
 }
