@@ -56,7 +56,6 @@ final class BuiltinDerivator {
 
           .jadt_(Makes.cases()
               .<Derivator<? extends AlgebraicDataType.Variant>>constructors_(new StrictConstructorDerivator(deriveUtils))
-              .lazyConstructor_(new LazyConstructorDerivator(deriveUtils))
               .getters_(new GettersDerivator(deriveUtils))
               .modifiers_(new ModifiersDerivator(deriveUtils))
               .otherwise_(__ -> DeriveResult.result(DerivedCodeSpec.none())))

@@ -34,17 +34,14 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
-import javax.lang.model.element.ElementKind;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.Modifier;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.element.VariableElement;
+import javax.lang.model.element.*;
 import javax.lang.model.type.ArrayType;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.PrimitiveType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.type.TypeVariable;
+import javax.lang.model.util.ElementFilter;
 import javax.lang.model.util.TypeKindVisitor8;
 import org.derive4j.ArgOption;
 import org.derive4j.Make;
@@ -55,11 +52,11 @@ import org.derive4j.processor.api.DerivedCodeSpec;
 import org.derive4j.processor.api.model.*;
 import org.derive4j.processor.api.model.AlgebraicDataType.Variant;
 import org.derive4j.processor.api.model.AlgebraicDataType.Variant.Drv4j;
+import org.derive4j.processor.api.model.AlgebraicDataType.Variant.Java;
 
 import static org.derive4j.processor.Utils.joinStrings;
 import static org.derive4j.processor.Utils.optionalAsStream;
 import static org.derive4j.processor.api.DeriveResult.result;
-import static org.derive4j.processor.api.DerivedCodeSpec.none;
 import static org.derive4j.processor.api.model.DataConstructions.caseOf;
 import static org.derive4j.processor.api.model.DeriveVisibilities.caseOf;
 
@@ -85,28 +82,37 @@ final class StrictConstructorDerivator implements Derivator<Variant> {
 
   @Override
   public DeriveResult<DerivedCodeSpec> derive(AlgebraicDataType<Variant> adt) {
-    return AlgebraicDataTypes.caseOf(adt)
+    // skip constructors for enums
+    return AlgebraicDataTypes.getTypeConstructor(adt).typeElement().getKind() == ElementKind.ENUM
+      ? result(DerivedCodeSpec.none())
+      : AlgebraicDataTypes.caseOf(adt)
+
         .adt((deriveConfig, typeConstructor, matchMethod, dataConstruction, fields, eq) -> {
-            final var drv4jAdt = Utils.coerce(adt, eq);
-          DerivedCodeSpec codeSpec;
-          // skip constructors for enums
-          if (typeConstructor.declaredType().asElement().getKind() == ElementKind.ENUM) {
-            codeSpec = none();
-          } else {
-            codeSpec = caseOf(dataConstruction)
-                .multipleConstructors(
-                    constructors -> constructors.constructors().stream().map(dc -> constructorSpec(drv4jAdt, dc)).reduce(none(),
-                        DerivedCodeSpec::append))
-                .oneConstructor(constructor -> constructorSpec(drv4jAdt, constructor))
-                .noConstructor(DerivedCodeSpec::none);
-          }
+          final var drv4jAdt = Utils.coerce(adt, eq);
+          final var codeSpec = caseOf(dataConstruction)
+            .multipleConstructors(constructors -> constructors
+              .constructors()
+              .stream()
+              .map(dc -> constructorSpec(drv4jAdt, dc))
+              .reduce(DerivedCodeSpec.none(), DerivedCodeSpec::append))
+            .oneConstructor(constructor -> constructorSpec(drv4jAdt, constructor))
+            .noConstructor(DerivedCodeSpec::none);
 
           return needLambdaVisitorGeneration(adt)
               ? mapperDerivator.derive(drv4jAdt).map(codeSpec::append)
               : result(codeSpec);
         })
 
-        .jadt_(result(DerivedCodeSpec.none()));
+        .jadt((deriveConfig, typeConstructor, jDataConstruction, fields, eq) -> {
+          final var javaAdt = Utils.coerce(adt, eq);
+
+          return result(JDataConstructions.caseOf(jDataConstruction)
+              .multipleConstructors(records -> records
+                  .stream()
+                  .map(rec -> jConstructorSpec(javaAdt, rec))
+                  .reduce(DerivedCodeSpec.none(), DerivedCodeSpec::append))
+              .oneConstructor(record -> jConstructorSpec(javaAdt, record)));
+        });
   }
 
   Optional<ExecutableElement> findAbstractEquals(TypeElement typeElement) {
@@ -242,6 +248,50 @@ final class StrictConstructorDerivator implements Derivator<Variant> {
             throw new IllegalArgumentException();
           });
     });
+  }
+
+  private DerivedCodeSpec jConstructorSpec(AlgebraicDataType<Java> jadt, JRecord record) {
+    final var recType = JRecords.getElement(record);
+
+    final var recConstructor = ElementFilter
+        .constructorsIn(recType.getEnclosedElements())
+        .get(0);
+
+    final var recComponents = JRecords.getComponents(record);
+
+    final var factory = MethodSpec.methodBuilder(recType.getSimpleName().toString())
+        .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
+        .addTypeVariables(recType.getTypeParameters()
+            .stream()
+            .map(TypeVariableName::get)
+            .toList())
+        .addParameters(recComponents
+            .stream()
+            .map(c -> ParameterSpec.builder(TypeName.get(c.asType()), c.getSimpleName().toString()).build())
+            .collect(Collectors.toList()))
+        .varargs(recConstructor.isVarArgs())
+        .addCode(jadt.deriveConfig().argOptions().contains(ArgOption.checkedNotNull)
+            ? recComponents
+                .stream()
+                .filter(c -> !c.asType().getKind().isPrimitive())
+                .reduce(CodeBlock.builder().add("$[") // $[ => statement for javapoet
+                    , (cb, c) ->  cb
+                        .add("if ($1L == null) throw new NullPointerException(\"$1L must not be null\")"
+                           , c.getSimpleName())
+                    , (cb1, cb2) -> cb1.add(cb2.build()))
+                .add("$]") // $] statement end
+                .build()
+            : CodeBlock.of(""))
+        .returns(TypeName.get(jadt.typeConstructor().declaredType()));
+
+    return DerivedCodeSpec.methodSpec(factory
+        .addStatement("return new $T($L)"
+            , recType
+            , Utils.joinStringsAsArguments(recComponents
+                .stream()
+                .map(RecordComponentElement::getSimpleName)
+                .map(Object::toString)))
+        .build());
   }
 
   private DerivedCodeSpec constructorSpec(AlgebraicDataType<Drv4j> adt, DataConstructor constructor) {

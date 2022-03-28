@@ -36,7 +36,7 @@ import static org.derive4j.processor.api.DeriveResult.result;
 import static org.derive4j.processor.api.DerivedCodeSpec.codeSpec;
 import static org.derive4j.processor.api.DerivedCodeSpec.none;
 
-final class LazyConstructorDerivator implements Derivator<Variant> {
+final class LazyConstructorDerivator implements Derivator<Variant.Drv4j> {
 
   private final DeriveUtils                deriveUtils;
   private final StrictConstructorDerivator strictDerivator;
@@ -46,17 +46,8 @@ final class LazyConstructorDerivator implements Derivator<Variant> {
     strictDerivator = new StrictConstructorDerivator(deriveUtils);
   }
 
-    @Override
-  public DeriveResult<DerivedCodeSpec> derive(AlgebraicDataType<Variant> adt) {
-      return AlgebraicDataTypes.caseOf(adt)
-
-          .adt((deriveConfig, typeConstructor, matchMethod, dataConstruction, fields, eq) ->
-              deriveFromAdt(Utils.coerce(adt, eq)))
-
-          .jadt_(DeriveResult.result(DerivedCodeSpec.none()));
-    }
-
-  private DeriveResult<DerivedCodeSpec> deriveFromAdt(AlgebraicDataType<Variant.Drv4j> adt) {
+  @Override
+  public DeriveResult<DerivedCodeSpec> derive(AlgebraicDataType<Variant.Drv4j> adt) {
 
     // skip constructors for enums
     if (adt.typeConstructor().declaredType().asElement().getKind() == ElementKind.ENUM) {

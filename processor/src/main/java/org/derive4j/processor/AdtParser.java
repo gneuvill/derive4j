@@ -47,7 +47,6 @@ import static org.derive4j.processor.api.DeriveResult.error;
 import static org.derive4j.processor.api.DeriveResult.result;
 import static org.derive4j.processor.api.MessageLocalization.onAnnotation;
 import static org.derive4j.processor.api.MessageLocalization.onElement;
-import static org.derive4j.processor.api.model.AlgebraicDataTypes.adt;
 import static org.derive4j.processor.api.model.DataArguments.dataArgument;
 import static org.derive4j.processor.api.model.DataConstruction.multipleConstructors;
 import static org.derive4j.processor.api.model.DataConstruction.noConstructor;
@@ -118,7 +117,7 @@ final class AdtParser {
             expectedReturnType ->
                 parseDataConstruction(declaredType, adtTypeVariables, adtAcceptMethod, expectedReturnType)
                     .bind(dc -> validateFieldTypeUniformity(dc)
-                        .map(fields -> adt(deriveConfig,
+                        .map(fields -> AlgebraicDataTypes.adt(deriveConfig,
                             typeConstructor(adtTypeElement, declaredType, adtTypeVariables),
                             matchMethod(adtAcceptMethod, expectedReturnType),
                             dc,
