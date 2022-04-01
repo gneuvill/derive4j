@@ -18,25 +18,7 @@
  */
 package org.derive4j.processor;
 
-import com.squareup.javapoet.AnnotationSpec;
-import com.squareup.javapoet.ClassName;
-import com.squareup.javapoet.CodeBlock;
-import com.squareup.javapoet.MethodSpec;
-import com.squareup.javapoet.NameAllocator;
-import com.squareup.javapoet.ParameterSpec;
-import com.squareup.javapoet.ParameterizedTypeName;
-import com.squareup.javapoet.TypeName;
-import com.squareup.javapoet.TypeVariableName;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Optional;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-import javax.lang.model.element.Modifier;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.type.TypeMirror;
-import javax.lang.model.type.TypeVariable;
+import com.squareup.javapoet.*;
 import org.derive4j.processor.api.Derivator;
 import org.derive4j.processor.api.DeriveResult;
 import org.derive4j.processor.api.DeriveUtils;
@@ -44,8 +26,19 @@ import org.derive4j.processor.api.DerivedCodeSpec;
 import org.derive4j.processor.api.model.*;
 import org.derive4j.processor.api.model.AlgebraicDataType.Variant;
 
-import static org.derive4j.processor.Utils.joinStringsAsArguments;
+import javax.lang.model.element.Modifier;
+import javax.lang.model.element.RecordComponentElement;
+import javax.lang.model.type.TypeVariable;
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import static org.derive4j.processor.Utils.*;
 import static org.derive4j.processor.api.DeriveResult.result;
+import static org.derive4j.processor.api.model.AlgebraicDataTypes.caseOf;
 import static org.derive4j.processor.api.model.DataConstructions.caseOf;
 import static org.derive4j.processor.api.model.DeriveVisibilities.caseOf;
 
@@ -59,145 +52,222 @@ final class ModifiersDerivator implements Derivator<Variant> {
 
   @Override
   public DeriveResult<DerivedCodeSpec> derive(AlgebraicDataType<Variant> adt) {
-    return AlgebraicDataTypes.caseOf(adt)
-        .adt((deriveConfig, typeConstructor, matchMethod, dataConstruction, fields, eq) ->
-            deriveFromAdt(Utils.coerce(adt, eq)))
+    return result(adt
+        .fields()
+        .stream()
+        .map(da -> caseOf(adt)
+            .adt((deriveConfig, typeConstructor, matchMethod, dataConstruction, fields, eq) -> {
+              final var drv4jAdt = Utils.coerce(adt, eq);
 
-        .jadt_(result(DerivedCodeSpec.none()));
+              return generateModifier(drv4jAdt, da
+                  , AlgebraicDataTypes.getDataConstruction_(drv4jAdt).constructors()
+                  , DataConstructor::typeRestrictions
+                  , curry(ModifiersDerivator::getTypeVariableName, AlgebraicDataTypes.getMatchMethod_(drv4jAdt)));
+            })
+
+            .jadt((deriveConfig, typeConstructor, jDataConstruction, fields, eq) -> {
+              final var javaAdt = Utils.coerce(adt, eq);
+
+              return generateModifier(javaAdt, da
+                  , AlgebraicDataTypes.getJDataConstruction_(javaAdt).constructors()
+                  , __ -> Collections.emptyList()
+                  , TypeVariableName::get);
+            }))
+        .reduce(DerivedCodeSpec.none(), DerivedCodeSpec::append));
   }
 
-  private DeriveResult<DerivedCodeSpec> deriveFromAdt(AlgebraicDataType<Variant.Drv4j> adt) {
+  private <T, U, V> DerivedCodeSpec generateModifier(AlgebraicDataType<T> adt
+      , DataArgument field
+      , List<U> constructors
+      , Function<U, List<V>> getTypeRestrictions
+      , Function<TypeVariable, TypeVariableName> getTypeVarName) {
+    final var moderArg = field.fieldName() + "Mod";
+    final var f1 = deriveUtils.function1Model(adt.deriveConfig().flavour()).samClass();
+    final var f1Apply = deriveUtils.allAbstractMethods(f1).get(0).getSimpleName().toString();
+    final var uniqueTypeVariables = getUniqueTypeVariables(field, adt.fields(), deriveUtils);
+    final var typeVariables = Stream
+        .concat(adt.typeConstructor().typeVariables().stream().map(TypeVariableName::get)
+              , uniqueTypeVariables.stream().map(getTypeVarName))
+        .distinct()
+        .toList();
 
-    return result(adt.fields().stream().map(da -> generateModifier(da, adt)).reduce(DerivedCodeSpec.none(),
-        DerivedCodeSpec::append));
-  }
-
-  private DerivedCodeSpec generateModifier(DataArgument field, AlgebraicDataType<Variant.Drv4j> adt) {
-
-    final var dataConstruction = AlgebraicDataTypes.getDataConstruction_(adt);
-    final var matchMethod = AlgebraicDataTypes.getMatchMethod_(adt);
-    String moderArg = field.fieldName() + "Mod";
-    TypeElement f1 = deriveUtils.function1Model(adt.deriveConfig().flavour()).samClass();
-    String f1Apply = deriveUtils.allAbstractMethods(f1).get(0).getSimpleName().toString();
-
-    List<TypeVariable> uniqueTypeVariables = getUniqueTypeVariables(field, adt.fields(), deriveUtils);
-
-    Function<TypeVariable, Optional<TypeName>> polymorphism = tv -> uniqueTypeVariables.stream()
+    final Function<TypeVariable, Optional<TypeName>> polymorphism = tv -> uniqueTypeVariables.stream()
         .filter(utv -> deriveUtils.types().isSameType(tv, utv))
         .findFirst()
-        .map(utv -> TypeVariableName.get(matchMethod.returnTypeVariable().toString() + utv));
+        .map(getTypeVarName);
 
-    TypeMirror boxedFieldType = field.type().accept(Utils.asBoxedType, deriveUtils.types());
+    final var boxedFieldType = field.type().accept(Utils.asBoxedType, deriveUtils.types());
+    final var smartSuffix = caseOf(adt.deriveConfig().targetClass().visibility()).Smart_("0").otherwise_("");
+    final var modMethodName = "mod" + Utils.capitalize(field.fieldName()) + smartSuffix;
 
-    String smartSuffix = caseOf(adt.deriveConfig().targetClass().visibility()).Smart_("0").otherwise_("");
-
-    String modMethodName = "mod" + Utils.capitalize(field.fieldName()) + smartSuffix;
-
-    NameAllocator nameAllocator = new NameAllocator();
+    final var nameAllocator = new NameAllocator();
     nameAllocator.newName(modMethodName);
 
-    String adtArg = nameAllocator
+    final var adtArg = nameAllocator
         .newName(Utils.uncapitalize(adt.typeConstructor().declaredType().asElement().getSimpleName()));
 
-    MethodSpec.Builder modBuilder = MethodSpec.methodBuilder(modMethodName)
+    final var modMethod = MethodSpec.methodBuilder(modMethodName)
         .addModifiers(Modifier.STATIC)
-        .addTypeVariables(
-            adt.typeConstructor().typeVariables().stream().map(TypeVariableName::get).collect(Collectors.toList()))
-        .addTypeVariables(uniqueTypeVariables.stream()
-            .map(utv -> TypeVariableName.get(matchMethod.returnTypeVariable().toString() + utv.toString()))
-            .collect(Collectors.toList()))
+        .addTypeVariables(typeVariables)
         .addParameter(ParameterSpec.builder(ParameterizedTypeName.get(ClassName.get(f1), TypeName.get(boxedFieldType),
             deriveUtils.resolveToTypeName(boxedFieldType, polymorphism)), moderArg).build())
         .returns(ParameterizedTypeName.get(ClassName.get(f1), TypeName.get(adt.typeConstructor().declaredType()),
             deriveUtils.resolveToTypeName(adt.typeConstructor().declaredType(), polymorphism)));
 
-    if (smartSuffix.isEmpty()) {
-      modBuilder.addModifiers(Modifier.PUBLIC);
-    }
+    if (smartSuffix.isEmpty())
+      modMethod.addModifiers(Modifier.PUBLIC);
 
-    if (dataConstruction.constructors().stream().anyMatch(dc -> !dc.typeRestrictions().isEmpty())) {
+    if (constructors.stream().anyMatch(dc -> !getTypeRestrictions.apply(dc).isEmpty()))
+      modMethod.addAnnotation(AnnotationSpec
+          .builder(SuppressWarnings.class)
+          .addMember("value", "$S", "unchecked")
+          .build());
 
-      modBuilder
-          .addAnnotation(AnnotationSpec.builder(SuppressWarnings.class).addMember("value", "$S", "unchecked").build());
-    }
-
-    CodeBlock lambdas = dataConstruction.constructors().stream().map(constructor -> {
-      String constructorName = StrictConstructorDerivator.smartConstructor(constructor, adt.deriveConfig())
-          ? (constructor.name() + '0')
-          : constructor.name();
-      return constructor.arguments().stream().map(DataArgument::fieldName).anyMatch(fn -> fn.equals(field.fieldName()))
-          ? CodeBlock.builder()
-              .add("($L) -> " + "$L($L)", joinStringsAsArguments(Stream.concat(
-                  constructor.arguments().stream().map(DataArgument::fieldName).map(
-                      fn -> nameAllocator.clone().newName(fn, fn + " field")),
-                  constructor.typeRestrictions().stream().map(TypeRestriction::typeEq).map(DataArgument::fieldName).map(
-                      fn -> nameAllocator.clone().newName(fn, fn + " field")))),
-                  constructorName,
-                  joinStringsAsArguments(Stream
-                      .concat(constructor.arguments().stream(),
-                          constructor.typeRestrictions().stream().map(TypeRestriction::typeEq))
-                      .map(DataArgument::fieldName)
-                      .map(fn -> fn.equals(field.fieldName())
-                          ? (moderArg + '.' + f1Apply + '(' + nameAllocator.clone().newName(fn, fn + " field") + ')')
-                          : nameAllocator.clone().newName(fn, fn + " field"))))
-              .build()
-          : CodeBlock.of("$T::$L", adt.deriveConfig().targetClass().className(), constructorName);
-    }).reduce((cb1, cb2) -> CodeBlock.builder().add(cb1).add(",\n").add(cb2).build()).orElse(
-        CodeBlock.builder().build());
-
-    String setterArgName = "new" + Utils.capitalize(field.fieldName());
-    MethodSpec.Builder setMethod = MethodSpec.methodBuilder("set" + Utils.capitalize(field.fieldName()) + smartSuffix)
+    final var setterArgName = "new" + Utils.capitalize(field.fieldName());
+    final var setMethod = MethodSpec.methodBuilder("set" + Utils.capitalize(field.fieldName()) + smartSuffix)
         .addModifiers(Modifier.STATIC)
-        .addTypeVariables(
-            adt.typeConstructor().typeVariables().stream().map(TypeVariableName::get).collect(Collectors.toList()))
-        .addTypeVariables(uniqueTypeVariables.stream()
-            .map(utv -> TypeVariableName.get(matchMethod.returnTypeVariable().toString() + utv.toString()))
-            .collect(Collectors.toList()))
+        .addTypeVariables(typeVariables)
         .addParameter(
             ParameterSpec.builder(deriveUtils.resolveToTypeName(boxedFieldType, polymorphism), setterArgName).build())
         .returns(ParameterizedTypeName.get(ClassName.get(f1), TypeName.get(adt.typeConstructor().declaredType()),
             deriveUtils.resolveToTypeName(adt.typeConstructor().declaredType(), polymorphism)))
         .addStatement("return $L(__ -> $L)", modMethodName, setterArgName);
 
-    if (smartSuffix.isEmpty()) {
+    if (smartSuffix.isEmpty())
       setMethod.addModifiers(Modifier.PUBLIC);
-    }
 
-    return caseOf(dataConstruction).multipleConstructors(
-        MultipleConstructorsSupport.cases().visitorDispatch((visitorParam, visitorType, constructors) -> {
+    return DerivedCodeSpec.methodSpecs(Stream
+        .of(Optional.of(setMethod.build()), caseOf(adt)
+            .adt((deriveConfig, typeConstructor, matchMethod, dataConstruction, fields, eq) ->
+                drv4jModImpl(Utils.coerce(adt, eq), field, adtArg, moderArg, f1Apply, polymorphism, nameAllocator, modMethod))
 
-          String visitorVarName = Utils.uncapitalize(visitorType.asElement().getSimpleName());
+            .jadt((deriveConfig, typeConstructor, jDataConstruction, fields, eq) ->
+                javaModImpl(Utils.coerce(adt, eq), field, adtArg, moderArg, f1Apply, nameAllocator, modMethod)))
+        .flatMap(Optional::stream)
+        .toList());
+  }
 
-          return DerivedCodeSpec
-              .methodSpecs(
-                  Arrays
-                      .asList(setMethod.build(),
-                          modBuilder
-                              .addStatement("$T $L = $L($L)",
-                                  deriveUtils.resolveToTypeName(visitorType,
-                                      tv -> deriveUtils.types().isSameType(tv, matchMethod.returnTypeVariable())
-                                          ? Optional.of(deriveUtils
-                                              .resolveToTypeName(adt.typeConstructor().declaredType(), polymorphism))
-                                          : Optional.empty()),
-                                  visitorVarName,
-                                  adt.deriveConfig().targetClass().className().nestedClass(
-                                      MapperDerivator.visitorLambdaFactoryName(adt)),
-                                  lambdas)
-                              .addStatement("return $1L -> $1L.$2L($3L)", adtArg,
-                                  matchMethod.element().getSimpleName(), visitorVarName)
-                              .build()));
+  private Optional<MethodSpec> javaModImpl(AlgebraicDataType<Variant.Java> adt
+      , DataArgument field
+      , String adtArg
+      , String moderArg
+      , String f1Apply
+      , NameAllocator na
+      , MethodSpec.Builder modMethod) {
+
+    final var _switch = CodeBlock
+        .builder()
+        .add("switch($N) {\n", adtArg)
+        .indent()
+        .add(AlgebraicDataTypes.getJDataConstruction_(adt)
+            .constructors()
+            .stream()
+            .map(rec -> {
+              final var elt = JRecords.getElement(rec);
+              final var caseVar = na.newName(uncapitalize(elt.getSimpleName()));
+              final var contructorCall = "%s.%s"
+                  .formatted(adt.deriveConfig().targetClass().className().simpleName()
+                           , elt.getSimpleName());
+              final var args = Utils.joinStringsAsArguments(JRecords
+                  .getComponents(rec)
+                  .stream()
+                  .map(RecordComponentElement::getSimpleName)
+                  .map(cptName -> {
+                    final var cptCall = "%s.%s()".formatted(caseVar, cptName);
+
+                    return cptName.contentEquals(field.fieldName())
+                        ? "%s.%s(%s)".formatted(moderArg, f1Apply, cptCall)
+                        : cptCall;
+                  }));
+
+              return CodeBlock.builder()
+                  .add("case $T $N -> $L($L);", elt, caseVar, contructorCall, args)
+                  .build();
+            })
+            .reduce((cb1, cb2) -> cb1.toBuilder().add("\n").add(cb2).build())
+            .orElse(CodeBlock.of("")))
+        .unindent()
+        .add("\n}")
+        .build();
+
+    return Optional.of(modMethod
+        .addStatement("return $L -> $L", adtArg, _switch)
+        .build());
+  }
+
+  private Optional<MethodSpec> drv4jModImpl(AlgebraicDataType<Variant.Drv4j> adt
+      , DataArgument field
+      , String adtArg
+      , String moderArg
+      , String f1Apply
+      , Function<TypeVariable, Optional<TypeName>> polymorphism
+      , NameAllocator nameAllocator
+      , MethodSpec.Builder modMethod) {
+    final var dataConstruction = AlgebraicDataTypes.getDataConstruction_(adt);
+    final var matchMethod = AlgebraicDataTypes.getMatchMethod_(adt);
+
+    final var lambdas = dataConstruction.constructors()
+        .stream()
+        .map(constructor -> {
+          final var arguments = constructor.arguments();
+          final var typeRestrictions = constructor.typeRestrictions();
+          final var constructorName = StrictConstructorDerivator.smartConstructor(constructor, adt.deriveConfig())
+              ? (constructor.name() + '0')
+              : constructor.name();
+
+          return arguments.stream().map(DataArgument::fieldName).anyMatch(fn -> fn.equals(field.fieldName()))
+              ? CodeBlock.builder()
+              .add("($L) -> " + "$L($L)", joinStringsAsArguments(Stream.concat(
+                      arguments.stream().map(DataArgument::fieldName).map(
+                          fn -> nameAllocator.clone().newName(fn, fn + " field")),
+                      typeRestrictions.stream().map(TypeRestriction::typeEq).map(DataArgument::fieldName).map(
+                          fn -> nameAllocator.clone().newName(fn, fn + " field")))),
+                  constructorName,
+                  joinStringsAsArguments(Stream
+                      .concat(arguments.stream().map(DataArgument::fieldName),
+                          typeRestrictions.stream().map(TypeRestriction::typeEq).map(DataArgument::fieldName))
+                      .map(fn -> fn.equals(field.fieldName())
+                          ? (moderArg + '.' + f1Apply + '(' + nameAllocator.clone().newName(fn, fn + " field") + ')')
+                          : nameAllocator.clone().newName(fn, fn + " field"))))
+              .build()
+              : CodeBlock.of("$T::$L", adt.deriveConfig().targetClass().className(), constructorName);
         })
-            .functionsDispatch(constructors -> DerivedCodeSpec.methodSpecs(Arrays.asList(setMethod.build(),
-                modBuilder
-                    .addStatement("return $1L -> $1L.$2L($3L)", adtArg, matchMethod.element().getSimpleName(),
-                        lambdas)
-                    .build()))))
-        .oneConstructor(constructor -> DerivedCodeSpec.methodSpecs(Arrays.asList(setMethod.build(),
-            modBuilder
+        .reduce((cb1, cb2) -> CodeBlock.builder().add(cb1).add(",\n").add(cb2).build())
+        .orElse(CodeBlock.builder().build());
+
+    return caseOf(dataConstruction)
+        .multipleConstructors(MultipleConstructorsSupport.cases()
+            .visitorDispatch((visitorParam, visitorType, constructors) -> {
+              final var visitorVarName = Utils.uncapitalize(visitorType.asElement().getSimpleName());
+
+              return modMethod
+                  .addStatement("$T $L = $L($L)",
+                      deriveUtils.resolveToTypeName(visitorType,
+                          tv -> deriveUtils.types().isSameType(tv, matchMethod.returnTypeVariable())
+                              ? Optional.of(deriveUtils
+                              .resolveToTypeName(adt.typeConstructor().declaredType(), polymorphism))
+                              : Optional.empty()),
+                      visitorVarName,
+                      adt.deriveConfig().targetClass().className().nestedClass(
+                          MapperDerivator.visitorLambdaFactoryName(adt)),
+                      lambdas)
+                  .addStatement("return $1L -> $1L.$2L($3L)", adtArg,
+                      matchMethod.element().getSimpleName(), visitorVarName)
+                  .build();
+            })
+            .functionsDispatch(constructors -> modMethod
                 .addStatement("return $1L -> $1L.$2L($3L)", adtArg, matchMethod.element().getSimpleName(),
                     lambdas)
-                .build())))
-        .noConstructor(DerivedCodeSpec::none);
+                .build()))
+        .oneConstructor(constructor -> modMethod
+            .addStatement("return $1L -> $1L.$2L($3L)", adtArg, matchMethod.element().getSimpleName(),
+                lambdas)
+            .build())
+        .otherwiseEmpty();
+  }
+
+  private static TypeVariableName getTypeVariableName(MatchMethod matchMethod, TypeVariable utv) {
+    return TypeVariableName.get(matchMethod.returnTypeVariable().toString() + utv.toString());
   }
 
   private static List<TypeVariable> getUniqueTypeVariables(DataArgument field, List<DataArgument> allFields,

@@ -102,10 +102,11 @@ public class CompileExamplesTest {
   private static void checkCompileOf(String... exampleFiles) {
     Truth.assert_()
         .about(javaSources())
-        .that(Arrays.asList(exampleFiles)
-            .stream()
+        .that(Arrays
+            .stream(exampleFiles)
             .map(file -> JavaFileObjects.forResource("org/derive4j/example/" + file))
             .collect(Collectors.toList()))
+        .withCompilerOptions("--release", "17", "--enable-preview")
         .processedWith(new DerivingProcessor())
         .compilesWithoutError();
   }

@@ -274,6 +274,10 @@ final class Utils {
     return f;
   }
 
+  static <A, B, C> BiFunction<A, B, C> f2(BiFunction<A, B, C> f) {
+    return f;
+  }
+
   static <A, B, C> Function<A, Function<B, C>> curry(BiFunction<A, B, C> f) {
     return a -> b -> f.apply(a, b);
   }
