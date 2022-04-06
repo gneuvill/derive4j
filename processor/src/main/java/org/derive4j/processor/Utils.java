@@ -19,7 +19,6 @@
 package org.derive4j.processor;
 
 import com.squareup.javapoet.*;
-import org.derive4j.hkt.TypeEq;
 import org.derive4j.processor.api.DeriveMessage;
 import org.derive4j.processor.api.DeriveResult;
 import org.derive4j.processor.api.model.*;
@@ -343,7 +342,8 @@ final class Utils {
     return zip(as, IntStream.range(0, as.size()).boxed().collect(toList()));
   }
 
-  static <S, T> AlgebraicDataType<T> coerce(AlgebraicDataType<S> adt, TypeEq<T, S> eq) {
-    return Drv4jProcApi.asAlgebraicDataType(eq.symm().<AlgebraicDataType.µ>lift().coerce(adt));
+  @SuppressWarnings("unchecked")
+  static <S, T> AlgebraicDataType<T> coerce(AlgebraicDataType<S> adt, Function<T, S> ignoredEq) {
+    return (AlgebraicDataType<T>) adt;
   }
 }

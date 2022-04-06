@@ -19,34 +19,45 @@
 package org.derive4j.processor.api.model;
 
 import org.derive4j.Data;
+import org.derive4j.Derive;
 import org.derive4j.ExportAsPublic;
-import org.derive4j.hkt.TypeEq;
-import org.derive4j.hkt.__;
+import org.derive4j.Visibility;
 import org.derive4j.processor.api.model.AlgebraicDataType.Variant.Drv4j;
 import org.derive4j.processor.api.model.AlgebraicDataType.Variant.Java;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Function;
 
-@Data
-public abstract class AlgebraicDataType<T> implements __<AlgebraicDataType.µ, T> {
+@Data @Derive(withVisibility = Visibility.Smart)
+public abstract class AlgebraicDataType<T> {
   public sealed interface Variant {
     enum Drv4j implements Variant {}
     enum Java implements Variant {}
   }
-  public enum µ {}
 
   public interface Cases<R, T> {
     R adt(DeriveConfig deriveConfig, TypeConstructor typeConstructor, MatchMethod matchMethod,
-        DataConstruction dataConstruction, List<DataArgument> fields, TypeEq<Drv4j, T> eq);
+        DataConstruction dataConstruction, List<DataArgument> fields, Function<Drv4j, T> eq);
     R jadt(DeriveConfig deriveConfig, TypeConstructor typeConstructor,
-        JDataConstruction jDataConstruction, List<DataArgument> fields, TypeEq<Java, T> eq);
-  }
-
-  AlgebraicDataType() {
+        JDataConstruction jDataConstruction, List<DataArgument> fields, Function<Java, T> jeq);
   }
 
   public abstract <R> R match(Cases<R, T> adt);
+
+  AlgebraicDataType() {}
+
+  @ExportAsPublic
+  static AlgebraicDataType<Drv4j> adt(DeriveConfig deriveConfig, TypeConstructor typeConstructor, MatchMethod matchMethod,
+        DataConstruction dataConstruction, List<DataArgument> fields) {
+    return AlgebraicDataTypes.adt0(deriveConfig, typeConstructor, matchMethod, dataConstruction, fields, Function.identity());
+  }
+
+  @ExportAsPublic
+  static AlgebraicDataType<Java> jadt(DeriveConfig deriveConfig, TypeConstructor typeConstructor,
+        JDataConstruction jDataConstruction, List<DataArgument> fields) {
+    return AlgebraicDataTypes.jadt0(deriveConfig, typeConstructor, jDataConstruction, fields, Function.identity());
+  }
 
   public DeriveConfig deriveConfig() {
 

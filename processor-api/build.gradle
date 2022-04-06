@@ -4,9 +4,7 @@ archivesBaseName = "${project.projectName}-${project.name}"
 
 dependencies {
   api project(":annotation")
-  api dependencyHkt
   api dependencyJavaPoet
   testImplementation dependencyJunit
   annotationProcessor dependencyPreviousDerive4J
-  annotationProcessor dependencyHkt
 }

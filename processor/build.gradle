@@ -6,7 +6,6 @@ dependencies {
   api project(":annotation")
   api project(":processor-api")
   api dependencyJavaPoet
-  api dependencyHkt
   implementation dependencyAutoService
   annotationProcessor dependencyAutoService
   annotationProcessor dependencyPreviousDerive4J
