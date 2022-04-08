@@ -29,6 +29,7 @@ import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
 import com.squareup.javapoet.TypeVariableName;
 import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -54,8 +55,7 @@ import org.derive4j.processor.api.model.AlgebraicDataType.Variant;
 import org.derive4j.processor.api.model.AlgebraicDataType.Variant.Drv4j;
 import org.derive4j.processor.api.model.AlgebraicDataType.Variant.Java;
 
-import static org.derive4j.processor.Utils.joinStrings;
-import static org.derive4j.processor.Utils.optionalAsStream;
+import static org.derive4j.processor.Utils.*;
 import static org.derive4j.processor.api.DeriveResult.result;
 import static org.derive4j.processor.api.model.DataConstructions.caseOf;
 import static org.derive4j.processor.api.model.DeriveVisibilities.caseOf;
@@ -252,15 +252,16 @@ final class StrictConstructorDerivator implements Derivator<Variant> {
 
   private DerivedCodeSpec jConstructorSpec(AlgebraicDataType<Java> jadt, JRecord record) {
     final var recType = JRecords.getElement(record);
-
+    final var recComponents = JRecords.getComponents(record);
+    final var smartConstructor = smartConstructor(record, jadt.deriveConfig());
+    final var factoryName = recType.getSimpleName().toString() + (smartConstructor ? '0' : "");
+    final var modifiers = EnumSet.of(Modifier.STATIC, smartConstructor ? Modifier.STATIC : Modifier.PUBLIC);
     final var recConstructor = ElementFilter
         .constructorsIn(recType.getEnclosedElements())
         .get(0);
 
-    final var recComponents = JRecords.getComponents(record);
-
-    final var factory = MethodSpec.methodBuilder(recType.getSimpleName().toString())
-        .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
+    final var factory = MethodSpec.methodBuilder(factoryName)
+        .addModifiers(modifiers)
         .addTypeVariables(recType.getTypeParameters()
             .stream()
             .map(TypeVariableName::get)
@@ -289,8 +290,7 @@ final class StrictConstructorDerivator implements Derivator<Variant> {
             , recType
             , Utils.joinStringsAsArguments(recComponents
                 .stream()
-                .map(RecordComponentElement::getSimpleName)
-                .map(Object::toString)))
+                .map(f(Object::toString).compose(RecordComponentElement::getSimpleName))))
         .build());
   }
 
@@ -392,7 +392,6 @@ final class StrictConstructorDerivator implements Derivator<Variant> {
               argument.fieldName());
         }
       }
-
     }
 
     DerivedCodeSpec result;
@@ -432,8 +431,17 @@ final class StrictConstructorDerivator implements Derivator<Variant> {
   }
 
   static boolean smartConstructor(DataConstructor constructor, DeriveConfig deriveConfig) {
-    return !constructor.arguments().isEmpty()
-        && caseOf(deriveConfig.targetClass().visibility()).Smart_(true).otherwise_(false);
+    return smartConstructorImpl(constructor.arguments(), deriveConfig);
+  }
+
+  static boolean smartConstructor(JRecord record, DeriveConfig deriveConfig) {
+    return smartConstructorImpl(JRecords.getComponents(record), deriveConfig);
+  }
+
+  private static boolean smartConstructorImpl(List<?> args, DeriveConfig deriveConfig) {
+    return !args.isEmpty() && caseOf(deriveConfig.targetClass().visibility())
+        .Smart_(true)
+        .otherwise_(false);
   }
 
   private static String equalityTest(DataArgument da) {

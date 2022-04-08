@@ -27,7 +27,6 @@ import org.derive4j.processor.api.model.*;
 import org.derive4j.processor.api.model.AlgebraicDataType.Variant;
 
 import javax.lang.model.element.Modifier;
-import javax.lang.model.element.RecordComponentElement;
 import javax.lang.model.type.TypeVariable;
 import java.util.Collections;
 import java.util.List;
@@ -55,24 +54,21 @@ final class ModifiersDerivator implements Derivator<Variant> {
     return result(adt
         .fields()
         .stream()
-        .map(da -> caseOf(adt)
-            .adt((deriveConfig, typeConstructor, matchMethod, dataConstruction, fields, eq) -> {
-              final var drv4jAdt = Utils.coerce(adt, eq);
+        .map(dataArg -> caseOf(adt)
+            .adt((deriveConfig, typeConstructor, matchMethod, dataConstruction, fields, eq) ->
+                generateModifier(Utils.coerce(adt, eq)
+                    , dataArg
+                    , dataConstruction.constructors()
+                    , DataConstructor::typeRestrictions
+                    , curry(ModifiersDerivator::getTypeVariableName, matchMethod)))
 
-              return generateModifier(drv4jAdt, da
-                  , AlgebraicDataTypes.getDataConstruction_(drv4jAdt).constructors()
-                  , DataConstructor::typeRestrictions
-                  , curry(ModifiersDerivator::getTypeVariableName, AlgebraicDataTypes.getMatchMethod_(drv4jAdt)));
-            })
+            .jadt((deriveConfig, typeConstructor, jDataConstruction, fields, eq) ->
+                generateModifier(Utils.coerce(adt, eq)
+                    , dataArg
+                    , jDataConstruction.constructors()
+                    , __ -> Collections.emptyList()
+                    , TypeVariableName::get)))
 
-            .jadt((deriveConfig, typeConstructor, jDataConstruction, fields, eq) -> {
-              final var javaAdt = Utils.coerce(adt, eq);
-
-              return generateModifier(javaAdt, da
-                  , AlgebraicDataTypes.getJDataConstruction_(javaAdt).constructors()
-                  , __ -> Collections.emptyList()
-                  , TypeVariableName::get);
-            }))
         .reduce(DerivedCodeSpec.none(), DerivedCodeSpec::append));
   }
 
@@ -165,14 +161,16 @@ final class ModifiersDerivator implements Derivator<Variant> {
             .map(rec -> {
               final var elt = JRecords.getElement(rec);
               final var caseVar = na.newName(uncapitalize(elt.getSimpleName()));
+              final var constructorName = elt.getSimpleName().toString()
+                  + (StrictConstructorDerivator.smartConstructor(rec, adt.deriveConfig()) ? '0' : "");
               final var contructorCall = "%s.%s"
                   .formatted(adt.deriveConfig().targetClass().className().simpleName()
-                           , elt.getSimpleName());
+                           , constructorName);
               final var args = Utils.joinStringsAsArguments(JRecords
                   .getComponents(rec)
                   .stream()
-                  .map(RecordComponentElement::getSimpleName)
-                  .map(cptName -> {
+                  .map(cpt -> {
+                    final var cptName = cpt.getSimpleName();
                     final var cptCall = "%s.%s()".formatted(caseVar, cptName);
 
                     return cptName.contentEquals(field.fieldName())
