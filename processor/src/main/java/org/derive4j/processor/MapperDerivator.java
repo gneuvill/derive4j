@@ -133,7 +133,8 @@ class MapperDerivator implements Derivator<Drv4j> {
     Map<TypeVariable, TypeMirror> visitorTypeVarSubstitutions = zip(dc.deconstructor().methodType().getParameterTypes(),
         dc.deconstructor().visitorMethodType().getParameterTypes())
             .stream()
-            .flatMap(p -> deriveUtils.unify(p._2(), p._1()).get().entrySet().stream())
+            .flatMap(p -> deriveUtils.unify(p._2(), p._1()).stream())
+            .flatMap(m -> m.entrySet().stream())
             .collect(Collectors.toMap(
                 Map.Entry::getKey,
                 Map.Entry::getValue,

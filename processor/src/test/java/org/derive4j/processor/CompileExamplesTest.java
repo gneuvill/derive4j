@@ -90,6 +90,11 @@ public class CompileExamplesTest {
   }
 
   @Test
+  public void compile_Task() {
+    checkCompileOf("Task.java");
+  }
+
+  @Test
   public void compile_extensible_algebras() {
     checkCompileOf("algebras/ObjectAlgebras.java");
   }
