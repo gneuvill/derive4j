@@ -820,8 +820,18 @@ final class DeriveUtilsImpl implements DeriveUtils {
   }
 
   private Stream<String> allTypeArgsAsString(TypeMirror tm) {
-    return asDeclaredType(tm).map(dt -> concat(dt.getTypeArguments().stream().flatMap(this::allTypeArgsAsString),
-        Stream.of(dt.asElement().getSimpleName().toString()))).orElseGet(() -> Stream.of(tm.toString()));
+    return asDeclaredType(tm)
+        .map(dt -> {
+          final var pkg = elements().getPackageOf(dt.asElement()).getQualifiedName().toString() + ".";
+          final var nameParts = asTypeElement(tm)
+              .map(te -> te.getQualifiedName().toString().replaceFirst(pkg, ""))
+              .orElse("")
+              .split("\\.");
+
+          return concat(dt.getTypeArguments().stream().flatMap(this::allTypeArgsAsString),
+              Arrays.stream(nameParts).skip(nameParts.length > 2 ? nameParts.length - 2 : 0));
+        })
+        .orElseGet(() -> Stream.of(tm.toString()));
   }
 
   private Optional<InstanceLocation> findCompiledInstance(TypeElement typeElementContext, TypeElement typeClass,
