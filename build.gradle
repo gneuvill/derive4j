@@ -99,6 +99,11 @@ subprojects {
         }
     }
 
+    javadoc.options {
+        addBooleanOption('-enable-preview', true)
+        addStringOption('-release', "$sourceCompatibility")
+    }
+
     license {
         header file('etc/HEADER.txt')
         strictCheck true
