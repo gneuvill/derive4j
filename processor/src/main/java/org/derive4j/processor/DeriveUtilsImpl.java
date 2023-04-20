@@ -806,7 +806,7 @@ final class DeriveUtilsImpl implements DeriveUtils {
   }
 
   private String instanceVariableName(TypeElement typeClass, TypeMirror type) {
-    Stream<String> nameElts = concat(allTypeArgsAsString(type), Stream.of(typeClass.getSimpleName().toString()));
+    Stream<String> nameElts = concat(typeArgsUniqueNames(type), Stream.of(typeClass.getSimpleName().toString()));
 
     return uncapitalize(
         nameElts.filter(s -> !s.equals("?"))
@@ -819,7 +819,7 @@ final class DeriveUtilsImpl implements DeriveUtils {
     return uncapitalize(typeElement.getSimpleName().toString() + typeClass.getSimpleName().toString());
   }
 
-  private Stream<String> allTypeArgsAsString(TypeMirror tm) {
+  private Stream<String> typeArgsUniqueNames(TypeMirror tm) {
     return asDeclaredType(tm)
         .map(dt -> {
           final var pkg = elements().getPackageOf(dt.asElement()).getQualifiedName().toString() + ".";
@@ -828,7 +828,7 @@ final class DeriveUtilsImpl implements DeriveUtils {
               .orElse("")
               .split("\\.");
 
-          return concat(dt.getTypeArguments().stream().flatMap(this::allTypeArgsAsString),
+          return concat(dt.getTypeArguments().stream().flatMap(this::typeArgsUniqueNames),
               Arrays.stream(nameParts).skip(nameParts.length > 2 ? nameParts.length - 2 : 0));
         })
         .orElseGet(() -> Stream.of(tm.toString()));
