@@ -32,8 +32,6 @@ import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
 import java.util.*;
 import java.util.function.Function;
-import java.util.function.Predicate;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -86,9 +84,7 @@ final class AdtParser {
                     tv -> types.isSameType(elements.getTypeElement("java.lang.Object").asType(), tv.getUpperBound()))),
             error(message("Please use only type variable without bounds as type parameter", onElement(adtTypeElement))),
 
-            adtTypeVariables ->
-                adtTypeElement.getKind() == ElementKind.RECORD
-            || (adtTypeElement.getKind() == ElementKind.INTERFACE && adtTypeElement.getModifiers().contains(Modifier.SEALED))
+            adtTypeVariables -> isJADT(adtTypeElement)
                 ? parseJADT(adtTypeElement, deriveConfig, declaredType, adtTypeVariables).map(__ -> __)
                 : parseADT(adtTypeElement, deriveConfig, declaredType, adtTypeVariables).map(__ -> __)));
   }
@@ -152,16 +148,29 @@ final class AdtParser {
             .getPermittedSubclasses()
             .stream()
             .flatMap(tm -> deriveUtils.asTypeElement(tm).stream())
+            .filter(Utils::isJADT)
             .toList();
 
-        yield permittedSubTypes
+        if (permittedSubTypes.isEmpty())
+              yield error(message("Data annotated sealed interfaces permit records or sealed interfaces only", onElement(adtTypeElt)));
+
+        final var pair = partition(permittedSubTypes, Utils::isRecord);
+
+        final var recsConstr = result(JDataConstructions.multipleConstructors(zipWithIndex(pair._1())
             .stream()
-            .anyMatch(te -> te.getKind() != ElementKind.RECORD)
-            ? error(message("Data annotated sealed interfaces permit records only", onElement(adtTypeElt)))
-            : result(JDataConstructions.multipleConstructors(zipWithIndex(permittedSubTypes)
-              .stream()
-              .map(tuple(JRecords::JRecord))
-              .toList()));
+            .map(tuple(JRecords::JRecord))
+            .toList()));
+
+        final var ifceConstrs = traverseResults(
+            zip(pair._2(), pair._2().stream().flatMap(te -> asDeclaredType.visit(te.asType()).stream()).toList())
+                .stream()
+                .map(p -> parseJDataConstruction(p._1(), p._2(), adtTypeVbs))
+                .toList());
+
+        yield recsConstr
+            .bind(jdr -> ifceConstrs
+                .map(jdis -> JDataConstructions.multipleConstructors(
+                    concat(jdr.constructors(), jdis.stream().flatMap(jdi -> jdi.constructors().stream()).toList()))));
       }
 
       default -> { throw new Error("The impossible has happened"); }

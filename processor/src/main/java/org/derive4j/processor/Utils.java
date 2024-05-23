@@ -261,6 +261,26 @@ final class Utils {
     return amongElements.stream().map(asVariableElement::visit).flatMap(Utils::optionalAsStream);
   }
 
+  static boolean isRecord(TypeElement adtTypeElement) {
+    return adtTypeElement.getKind() == ElementKind.RECORD;
+  }
+
+  static boolean isInterface(TypeElement adtTypeElement) {
+    return adtTypeElement.getKind() == ElementKind.INTERFACE;
+  }
+
+  static boolean isSealed(TypeElement adtTypeElement) {
+    return adtTypeElement.getModifiers().contains(Modifier.SEALED);
+  }
+
+  static boolean isSealedInterface(TypeElement adtTypeElement) {
+    return isInterface(adtTypeElement) && isSealed(adtTypeElement);
+  }
+
+  static boolean isJADT(TypeElement adtTypeElement) {
+    return isRecord(adtTypeElement) || isSealedInterface(adtTypeElement);
+  }
+
   static <T> Predicate<T> p(Predicate<T> p) {
     return p;
   }
@@ -340,6 +360,25 @@ final class Utils {
 
   static <A> List<P2<A, Integer>> zipWithIndex(List<? extends A> as) {
     return zip(as, IntStream.range(0, as.size()).boxed().collect(toList()));
+  }
+
+  static <A> List<A> concat(List<A> xs, List<A> ys) {
+    final var res = new ArrayList<>(xs);
+    res.addAll(ys);
+    return res;
+  }
+
+  static <A> P2<List<A>, List<A>> partition(List<A> as, Function<A, Boolean> f) {
+      return as.stream()
+        .reduce(P2.p2(List.of(), List.of())
+              , (acc, a) ->  f.apply(a) ? P2.p2(append(acc._1(), a), acc._2()) : P2.p2(acc._1(), append(acc._2(), a))
+              , (__, p) -> p);
+  }
+
+  static <A> List<A> append(List<A> as, A a) {
+    final var res = new ArrayList<>(as);
+    res.add(a);
+    return res;
   }
 
   @SuppressWarnings("unchecked")
